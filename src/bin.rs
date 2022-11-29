@@ -6,11 +6,6 @@ static PARSER_TEST: &str = "8 + 2";
 fn main() {
     let lexer = crash::lexer::parse(PARSER_TEST);
 
-
-    combine::
-
-
-
     for token in lexer {
         println!("{:?}", token);
     }

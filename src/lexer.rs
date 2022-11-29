@@ -1,4 +1,3 @@
-use alloc::string::String;
 use logos::{Lexer, Logos};
 
 #[derive(Logos, Debug, Clone, PartialEq)]
@@ -88,7 +87,6 @@ pub enum Token {
 }
 
 fn trim_string(lexer: &mut Lexer<Token>) -> Option<String> {
-    use alloc::string::ToString;
     Some(
         lexer
             .slice()

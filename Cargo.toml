@@ -12,10 +12,5 @@ path = "src/lib.rs"
 name = "crash-cli"
 path = "src/bin.rs"
 
-[dependencies.logos]
-version = "*"
-default-features = false
-features = ["export_derive"]
-[dependencies.chomsky]
-version = "*"
-default-features = false
+[dependencies]
+logos = "*"
