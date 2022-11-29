@@ -11,3 +11,8 @@ path = "src/lib.rs"
 [[bin]]
 name = "crash-cli"
 path = "src/bin.rs"
+
+[dependencies.logos]
+version = "*"
+default-features = false
+features = ["export_derive"]
