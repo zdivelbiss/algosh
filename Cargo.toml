@@ -16,3 +16,6 @@ path = "src/bin.rs"
 version = "*"
 default-features = false
 features = ["export_derive"]
+[dependencies.chomsky]
+version = "*"
+default-features = false

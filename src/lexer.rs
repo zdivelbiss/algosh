@@ -73,7 +73,7 @@ pub enum Token {
     #[regex(r#""[^"\\]*(?:\\.[^"\\]*)*""#, trim_string)]
     String(String),
 
-    #[regex("[0-9]+", |lex| lex.slice().parse())]
+    #[regex(r"[\d]+", |lex| lex.slice().parse())]
     Integer(isize),
 
     #[regex(r"true|false", |lex| lex.slice().parse())]
