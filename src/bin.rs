@@ -1,6 +1,6 @@
 extern crate crash;
 
-static LEXER_TEST: &str = "if $\"env_var\" = 45 { $\"env_var\": 54 } else { $echo: \"failure\" }";
+static LEXER_TEST: &str = r#"if$"env_var"~=45{$"env_var":>>~8} else if true { $echo: "failure \" is possible" } else { exit }"#;
 
 
 
