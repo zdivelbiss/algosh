@@ -1,0 +1,13 @@
+[package]
+name = "crash"
+version = "0.1.0"
+edition = "2021"
+
+
+[lib]
+name = "crash"
+path = "src/lib.rs"
+
+[[bin]]
+name = "crash-cli"
+path = "src/bin.rs"
