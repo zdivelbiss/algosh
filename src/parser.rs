@@ -1,3 +1,5 @@
+use std::borrow::BorrowMut;
+
 use crate::lexer::Token;
 
 #[derive(Debug, PartialEq)]
@@ -53,22 +55,53 @@ impl<'a> TryFrom<&Token> for Variable {
 }
 
 #[derive(Debug, PartialEq)]
-struct Conditional {
-    condition: Node,
-    block: Node,
+pub enum Conditional {
+    Start { condition: Node, block: Node },
+    Next { condition: Node, block: Node },
+    End { block: Node },
 }
 
 impl TryFrom<&mut Parser> for Conditional {
     type Error = ();
 
     fn try_from(parser: &mut Parser) -> Result<Self, Self::Error> {
-        let condition = Node::try_from(parser)?;
-        let Ok(Node::Block(block_nodes)) = Node::try_from(parser) else { return Err(()) };
+        match parser.peek_token() {
+            Some(&Token::StartCondition) => {
+                parser.discard_token();
 
-        Ok(Self {
-            condition,
-            block: Node::Block(block_nodes),
-        })
+                let condition = Node::try_from(parser.borrow_mut())?;
+                let Ok(Node::Block(block_nodes)) = Node::try_from(parser.borrow_mut()) else { return Err(()) };
+
+                Ok(Self::Start {
+                    condition,
+                    block: Node::Block(block_nodes),
+                })
+            }
+
+            Some(&Token::NextCondition) => {
+                parser.discard_token();
+
+                let condition = Node::try_from(parser.borrow_mut())?;
+                let Ok(Node::Block(block_nodes)) = Node::try_from(parser.borrow_mut()) else { return Err(()) };
+
+                Ok(Self::Next {
+                    condition,
+                    block: Node::Block(block_nodes),
+                })
+            }
+
+            Some(&Token::EndCondition) => {
+                parser.discard_token();
+
+                let Ok(Node::Block(block_nodes)) = Node::try_from(parser.borrow_mut()) else { return Err(()) };
+
+                Ok(Self::End {
+                    block: Node::Block(block_nodes),
+                })
+            }
+
+            _ => Err(()),
+        }
     }
 }
 
@@ -91,11 +124,11 @@ impl TryFrom<&mut Parser> for Node {
     type Error = ();
 
     fn try_from(parser: &mut Parser) -> Result<Self, Self::Error> {
-        parser.peek_token().ok_or(())?;
+        println!("PARSE TOKEN: {:?}", parser.peek_token().ok_or(())?);
 
         if let Some(variable0) = parser.with_next(|t| Variable::try_from(t).ok()) {
             if let Some(op) = parser.with_next(|t| BinaryOp::try_from(t).ok())
-                && let Ok(righthand_node) = Node::try_from(parser)
+                && let Ok(righthand_node) = Node::try_from(parser.borrow_mut())
             {
                 Ok(Node::BinaryOp {
                     lefthand: variable0,
@@ -104,22 +137,16 @@ impl TryFrom<&mut Parser> for Node {
             } else {
                 Ok(Node::Variable(variable0))
             }
-        } else if let Some(&Token::StartCondition) = parser.peek_token() {
-            parser.discard_token();
+        } else if let Ok(Conditional::Start { condition, block }) =
+            Conditional::try_from(parser.borrow_mut())
+        {
+            let mut conditionals = vec![Conditional::Start { condition, block }];
 
-            // Loop over nodes by condition, followed by block.
-            let mut conditions = Vec::new();
-            loop {
-                let Ok(conditional) = Conditional::try_from(parser) else { break };
-                conditions.push(conditional);
+            while let Ok(conditional) = Conditional::try_from(parser.borrow_mut()) {
+                conditionals.push(conditional);
             }
 
-            // Return block node if any conditions were successfully parsed.
-            if !conditions.is_empty() {
-                Ok(Node::Conditionals(conditions))
-            } else {
-                Err(())
-            }
+            Ok(Node::Conditionals(conditionals))
         } else if let Some(&Token::BlockOpen) = parser.peek_token() {
             parser.discard_token();
 
@@ -127,8 +154,8 @@ impl TryFrom<&mut Parser> for Node {
             let mut block_nodes = Vec::new();
             loop {
                 let peek_token = parser.peek_token().ok_or(())?;
-                if peek_token.eq(&Token::BlockClose) {
-                    let block_node = Node::try_from(parser)?;
+                if !peek_token.eq(&Token::BlockClose) {
+                    let block_node = Node::try_from(parser.borrow_mut())?;
                     block_nodes.push(block_node);
                 } else {
                     parser.discard_token();

@@ -15,12 +15,12 @@ pub enum Token {
     #[token("}")]
     BlockClose,
 
+    #[token("if")]
+    StartCondition,
     #[token("else if")]
     NextCondition,
     #[token("else")]
     EndCondition,
-    #[token("if")]
-    StartCondition,
 
     #[token(":+")]
     AddAssign,
@@ -94,10 +94,10 @@ pub enum Token {
     String(String),
 
     #[regex(r"![\d]+", match_neg_integer)]
-    #[regex(r"[\d]+", |lex| lex.slice().parse(), priority = 2)]
+    #[regex(r"[\d]+", |lex| lex.slice().parse())]
     Integer(isize),
 
-    #[regex(r"[\w]+", match_identifier, priority = 1)]
+    #[regex(r"[\w]+", match_identifier, priority = 2)]
     Identifier(String),
 
     #[error]

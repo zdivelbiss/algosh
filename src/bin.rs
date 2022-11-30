@@ -7,9 +7,9 @@ static PARSER_TEST: &str = "if !1 + 1 = 0 { some } else { none }";
 
 fn main() {
     let lexer = crash::lexer::parse(PARSER_TEST);
-    let parser = Parser::new(Box::new(lexer.into_iter()));
+    // let parser = Parser::new(Box::new(lexer.into_iter()));
 
-    for expr in parser {
-        println!("{:?}", expr);
+    for a in lexer {
+        println!("{:?}", a);
     }
 }
