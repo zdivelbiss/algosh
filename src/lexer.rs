@@ -2,6 +2,9 @@ use logos::{Lexer, Logos};
 
 #[derive(Logos, Debug, Clone, PartialEq)]
 pub enum Token {
+    #[regex(r"[\s]+", logos::skip)]
+    Discard,
+
     #[token("{@")]
     LoopOpen,
     #[token("@}")]
@@ -18,6 +21,19 @@ pub enum Token {
     EndCondition,
     #[token("if")]
     StartCondition,
+
+    #[token(":+")]
+    AddAssign,
+    #[token(":-")]
+    SubAssign,
+    #[token(":*")]
+    MulAssign,
+    #[token(":/")]
+    DivAssign,
+    #[token(":>>")]
+    ShrAssign,
+    #[token(":<<")]
+    ShlAssign,
 
     #[token(":")]
     Assign,
@@ -37,9 +53,6 @@ pub enum Token {
     #[token("^")]
     Xor,
 
-    #[token("~")]
-    Neg,
-
     #[token(">=")]
     GreaterEq,
     #[token(">")]
@@ -50,6 +63,8 @@ pub enum Token {
     #[token("<")]
     Less,
 
+    #[token("!=")]
+    NegEq,
     #[token("=")]
     Eq,
 
@@ -63,6 +78,12 @@ pub enum Token {
     #[token("|")]
     Or,
 
+    #[token("exit")]
+    Exit,
+
+    #[regex(r"true|false", |lex| lex.slice().parse())]
+    Boolean(bool),
+
     #[regex(r#"\$"[\w]+""#, trim_string)]
     Variable(String),
 
@@ -72,17 +93,14 @@ pub enum Token {
     #[regex(r#""[^"\\]*(?:\\.[^"\\]*)*""#, trim_string)]
     String(String),
 
-    #[regex(r"[\d]+", |lex| lex.slice().parse())]
+    #[regex(r"![\d]+", match_neg_integer)]
+    #[regex(r"[\d]+", |lex| lex.slice().parse(), priority = 2)]
     Integer(isize),
 
-    #[regex(r"true|false", |lex| lex.slice().parse())]
-    Boolean(bool),
-
-    #[token("exit")]
-    Exit,
+    #[regex(r"[\w]+", match_identifier, priority = 1)]
+    Identifier(String),
 
     #[error]
-    #[regex(r"[\s]+", logos::skip)]
     Unknown,
 }
 
@@ -90,13 +108,25 @@ fn trim_string(lexer: &mut Lexer<Token>) -> Option<String> {
     Some(
         lexer
             .slice()
+            .trim()
             .trim_start_matches('$')
-            .trim_start_matches("#\"")
             .trim_start_matches('"')
-            .trim_end_matches("\"#")
             .trim_end_matches('"')
             .to_string(),
     )
+}
+
+fn match_neg_integer(lexer: &mut Lexer<Token>) -> Option<isize> {
+    isize::from_str_radix(lexer.slice().replace('!', "-").as_str(), 10).ok()
+}
+
+fn match_identifier(lexer: &mut Lexer<Token>) -> Option<String> {
+    let identifier = lexer.slice();
+    if !identifier.starts_with(|ch: char| ch.is_numeric()) {
+        Some(identifier.to_string())
+    } else {
+        None
+    }
 }
 
 pub fn parse(string: &str) -> logos::Lexer<Token> {
