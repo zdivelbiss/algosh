@@ -1,7 +1,6 @@
 use core::panic;
 use std::borrow::BorrowMut;
-
-use crate::lexer::Token;
+use crate::lexer::token::Token;
 
 #[derive(Debug, PartialEq)]
 pub enum BinaryOp {
@@ -38,6 +37,7 @@ impl<'a> TryFrom<&Token> for BinaryOp {
 pub enum Variable {
     Integer(isize),
     String(String),
+    Boolean(bool),
     Identifier(String),
 }
 
@@ -48,6 +48,7 @@ impl<'a> TryFrom<&Token> for Variable {
         match value {
             Token::Integer(int) => Ok(Self::Integer(*int)),
             Token::String(string) => Ok(Self::String(string.clone())),
+            Token::Boolean(boolean) => Ok(Self::Boolean(*boolean)),
             Token::Identifier(identifier) => Ok(Self::Identifier(identifier.clone())),
 
             _ => Err(()),
@@ -94,19 +95,22 @@ impl TryFrom<&mut Parser> for Node {
 
             let condition =
                 Node::try_from(parser.borrow_mut()).expect("expected conditional expression");
-            let Node::Block(block_nodes) =
-                Node::try_from(parser.borrow_mut()).expect("expected block") else { panic!("expected block") };
-
-            
+            let Ok(Node::Block(block_nodes)) = Node::try_from(parser.borrow_mut()) else { panic!("expected block") };
 
             match parser.peek_token() {
-                Some(&Token::EndCondition) | Some(&Token::BlockOpen) => Ok(Node::Conditional {
-                    condition: Box::new(condition),
-                    block: Box::new(Node::Block(block_nodes)),
-                    next_conditional: Some(Box::new(
-                        Node::try_from(parser.borrow_mut()).expect("expected block or condition"),
-                    )),
-                }),
+                Some(&Token::NextCondition) => {
+                    parser.discard_token();
+                    println!("{:?}", parser.peek_token());
+
+                    Ok(Node::Conditional {
+                        condition: Box::new(condition),
+                        block: Box::new(Node::Block(block_nodes)),
+                        next_conditional: Some(Box::new(
+                            Node::try_from(parser.borrow_mut())
+                                .expect("expected block or condition"),
+                        )),
+                    })
+                }
 
                 _ => Ok(Node::Conditional {
                     condition: Box::new(condition),
@@ -117,7 +121,7 @@ impl TryFrom<&mut Parser> for Node {
         } else if let Some(&Token::BlockOpen) = parser.peek_token() {
             parser.discard_token();
 
-            // Loop over nodes until an end block is found.
+            // Loop over nodes until an end block token is found.
             let mut block_nodes = Vec::new();
             loop {
                 let peek_token = parser.peek_token().expect("expected block closure");
