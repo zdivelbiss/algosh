@@ -17,8 +17,6 @@ pub enum Token {
 
     #[token("if")]
     StartCondition,
-    #[token("else if")]
-    NextCondition,
     #[token("else")]
     EndCondition,
 
@@ -94,10 +92,10 @@ pub enum Token {
     String(String),
 
     #[regex(r"![\d]+", match_neg_integer)]
-    #[regex(r"[\d]+", |lex| lex.slice().parse())]
+    #[regex(r"[\d]+", |lex| lex.slice().parse(), priority = 2)]
     Integer(isize),
 
-    #[regex(r"[\w]+", match_identifier, priority = 2)]
+    #[regex(r"[\w]+", match_identifier)]
     Identifier(String),
 
     #[error]
