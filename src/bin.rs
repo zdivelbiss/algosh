@@ -1,4 +1,4 @@
-// use crash::parser::Parser;
+#![allow(dead_code)]
 
 extern crate crash;
 
