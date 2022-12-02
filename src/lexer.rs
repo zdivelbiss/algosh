@@ -122,7 +122,7 @@ fn match_identifier(lexer: &mut Lexer<TokenKind>) -> Option<String> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     kind: TokenKind,
     span: Span,
@@ -152,31 +152,43 @@ pub struct TokenSource<'a> {
     pub col: usize,
 }
 
+struct LexerTokenizationIterator<'a>(logos::SpannedIter<'a, TokenKind>);
+impl Iterator for LexerTokenizationIterator<'_> {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (kind, span) = self.0.next()?;
+
+        Some(Token { kind, span })
+    }
+}
+
 pub struct LexerIterator<'a> {
     src: &'a str,
-    lexer: logos::SpannedIter<'a, TokenKind>,
+    lexer: std::iter::Peekable<LexerTokenizationIterator<'a>>,
 }
 
 impl LexerIterator<'_> {
-    pub fn find_token(&self, token: &Token) -> Option<TokenSource> {
-        let span_str = self.src.get(..token.span().end)?;
-        let (row, col) = span_str
-            .chars()
-            .fold((0usize, 0usize), |(mut row, mut col), ch| {
-                if ch == '\n' {
-                    row += 1;
-                    col = 0;
-                } else {
-                    col += 1;
-                }
+    pub fn src(&self) -> &str {
+        self.src
+    }
 
-                (row, col)
-            });
+    pub fn peek(&mut self) -> Option<&Token> {
+        self.lexer.peek()
+    }
+
+    pub fn find_token(&self, token: &Token) -> Option<TokenSource> {
+        let span_start = token.span().start;
+        let span_end = token.span().end;
+        let span_str = self.src.get(..span_end)?;
+        let (row, col) = span_str.lines().fold((0usize, 0usize), |(row, _), line| {
+            (row + 1, line.chars().count())
+        });
 
         Some(TokenSource {
             src: span_str.get(token.span().start..)?,
             row,
-            col,
+            col: col - (span_end - span_start),
         })
     }
 }
@@ -185,15 +197,13 @@ impl Iterator for LexerIterator<'_> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (kind, span) = self.lexer.next()?;
-
-        Some(Token { kind, span })
+        self.lexer.next()
     }
 }
 
 pub fn lexer(input: &str) -> LexerIterator {
     LexerIterator {
         src: input,
-        lexer: TokenKind::lexer(input).spanned(),
+        lexer: LexerTokenizationIterator(TokenKind::lexer(input).spanned()).peekable(),
     }
 }

@@ -1,6 +1,6 @@
+use crate::lexer::{Token, TokenKind};
 use core::panic;
 use std::borrow::BorrowMut;
-use crate::lexer::token::Token;
 
 #[derive(Debug, PartialEq)]
 pub enum BinaryOp {
@@ -17,16 +17,16 @@ pub enum BinaryOp {
 impl<'a> TryFrom<&Token> for BinaryOp {
     type Error = ();
 
-    fn try_from(value: &Token) -> Result<Self, Self::Error> {
-        match value {
-            Token::Eq => Ok(BinaryOp::Eq),
-            Token::NegEq => Ok(BinaryOp::NegEq),
-            Token::Add => Ok(BinaryOp::Add),
-            Token::Sub => Ok(BinaryOp::Sub),
-            Token::Mul => Ok(BinaryOp::Mul),
-            Token::Div => Ok(BinaryOp::Div),
-            Token::Shr => Ok(BinaryOp::Shr),
-            Token::Shl => Ok(BinaryOp::Shl),
+    fn try_from(token: &Token) -> Result<Self, Self::Error> {
+        match token.kind() {
+            TokenKind::Eq => Ok(BinaryOp::Eq),
+            TokenKind::NegEq => Ok(BinaryOp::NegEq),
+            TokenKind::Add => Ok(BinaryOp::Add),
+            TokenKind::Sub => Ok(BinaryOp::Sub),
+            TokenKind::Mul => Ok(BinaryOp::Mul),
+            TokenKind::Div => Ok(BinaryOp::Div),
+            TokenKind::Shr => Ok(BinaryOp::Shr),
+            TokenKind::Shl => Ok(BinaryOp::Shl),
 
             _ => Err(()),
         }
@@ -44,12 +44,12 @@ pub enum Variable {
 impl<'a> TryFrom<&Token> for Variable {
     type Error = ();
 
-    fn try_from(value: &Token) -> Result<Self, Self::Error> {
-        match value {
-            Token::Integer(int) => Ok(Self::Integer(*int)),
-            Token::String(string) => Ok(Self::String(string.clone())),
-            Token::Boolean(boolean) => Ok(Self::Boolean(*boolean)),
-            Token::Identifier(identifier) => Ok(Self::Identifier(identifier.clone())),
+    fn try_from(token: &Token) -> Result<Self, Self::Error> {
+        match token.kind() {
+            TokenKind::Integer(int) => Ok(Self::Integer(*int)),
+            TokenKind::String(string) => Ok(Self::String(string.clone())),
+            TokenKind::Boolean(boolean) => Ok(Self::Boolean(*boolean)),
+            TokenKind::Identifier(identifier) => Ok(Self::Identifier(identifier.clone())),
 
             _ => Err(()),
         }
@@ -75,7 +75,7 @@ pub enum Node {
     Block(Vec<Node>),
 }
 
-impl TryFrom<&mut Parser> for Node {
+impl TryFrom<&mut Parser<'_>> for Node {
     type Error = ();
 
     fn try_from(parser: &mut Parser) -> Result<Self, Self::Error> {
@@ -90,47 +90,41 @@ impl TryFrom<&mut Parser> for Node {
             } else {
                 Ok(Node::Variable(variable0))
             }
-        } else if let Some(&Token::StartCondition) = parser.peek_token() {
-            parser.discard_token();
-
-            let condition =
-                Node::try_from(parser.borrow_mut()).expect("expected conditional expression");
+        } else if let Some(true) = parser.next_eq(&TokenKind::StartCondition) {
+            let Ok(condition) = Node::try_from(parser.borrow_mut())
+                else {
+                    let peek_token = parser.peek_token().expect("no peekable token; this is a compiler error").clone();
+                    crate::throw_error(parser.tokens.src(), "Expected conditional expression", &parser.tokens.find_token(&peek_token).unwrap(), true);
+                    
+                    loop{
+                    }
+                };
             let Ok(Node::Block(block_nodes)) = Node::try_from(parser.borrow_mut()) else { panic!("expected block") };
 
-            match parser.peek_token() {
-                Some(&Token::NextCondition) => {
-                    parser.discard_token();
-                    println!("{:?}", parser.peek_token());
-
-                    Ok(Node::Conditional {
-                        condition: Box::new(condition),
-                        block: Box::new(Node::Block(block_nodes)),
-                        next_conditional: Some(Box::new(
-                            Node::try_from(parser.borrow_mut())
-                                .expect("expected block or condition"),
-                        )),
-                    })
-                }
-
-                _ => Ok(Node::Conditional {
+            if let Some(true) = parser.next_eq(&TokenKind::NextCondition) {
+                Ok(Node::Conditional {
+                    condition: Box::new(condition),
+                    block: Box::new(Node::Block(block_nodes)),
+                    next_conditional: Some(Box::new(
+                        Node::try_from(parser.borrow_mut()).expect("expected block or condition"),
+                    )),
+                })
+            } else {
+                Ok(Node::Conditional {
                     condition: Box::new(condition),
                     block: Box::new(Node::Block(block_nodes)),
                     next_conditional: None,
-                }),
+                })
             }
-        } else if let Some(&Token::BlockOpen) = parser.peek_token() {
-            parser.discard_token();
-
+        } else if let Some(true) = parser.next_eq(&TokenKind::BlockOpen) {
             // Loop over nodes until an end block token is found.
             let mut block_nodes = Vec::new();
             loop {
-                let peek_token = parser.peek_token().expect("expected block closure");
-                if !peek_token.eq(&Token::BlockClose) {
-                    block_nodes
-                        .push(Node::try_from(parser.borrow_mut()).expect("expected valid node"));
-                } else {
-                    parser.discard_token();
-                    break;
+                match parser.next_eq(&TokenKind::BlockClose) {
+                    Some(true) => break,
+                    Some(false) if let Ok(block_node) = Node::try_from(parser.borrow_mut()) => block_nodes
+                    .push(block_node),
+                    _ => panic!("expected valid node"),
                 }
             }
 
@@ -142,14 +136,14 @@ impl TryFrom<&mut Parser> for Node {
     }
 }
 
-pub struct Parser {
-    tokens: std::iter::Peekable<Box<dyn Iterator<Item = Token>>>,
+pub struct Parser<'a> {
+    tokens: crate::lexer::LexerIterator<'a>,
 }
 
-impl Parser {
-    pub fn new(tokens: Box<dyn Iterator<Item = Token>>) -> Self {
+impl<'a> Parser<'a> {
+    pub fn new(tokens: crate::lexer::LexerIterator<'a>) -> Self {
         Self {
-            tokens: tokens.peekable(),
+            tokens
         }
     }
 
@@ -173,13 +167,23 @@ impl Parser {
         result
     }
 
+    fn next_eq(&mut self, kind: &TokenKind) -> Option<bool> {
+        let peek = self.peek_token()?;
+        let eq = peek.kind().eq(kind);
+        if eq {
+            self.discard_token();
+        }
+
+        Some(eq)
+    }
+
     #[inline]
     fn discard_token(&mut self) {
         self.next_token().expect("cannot discard no tokens");
     }
 }
 
-impl Iterator for Parser {
+impl Iterator for Parser<'_> {
     type Item = Node;
 
     fn next(&mut self) -> Option<Self::Item> {
