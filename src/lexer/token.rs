@@ -5,6 +5,9 @@ pub enum TokenKind {
     #[regex(r"[\s]+", logos::skip)]
     Discard,
 
+    #[token(",")]
+    Separator,
+
     #[token("{")]
     BlockOpen,
     #[token("}")]
@@ -14,6 +17,11 @@ pub enum TokenKind {
     StartCondition,
     #[token("else")]
     NextCondition,
+
+    #[token("[")]
+    ArrayOpen,
+    #[token("]")]
+    ArrayClose,
 
     #[token(":+")]
     AddAssign,
@@ -79,10 +87,10 @@ pub enum TokenKind {
     Boolean(bool),
 
     #[regex(r#"\$"[\w]+""#, trim_string)]
-    Variable(String),
+    EnvVar(String),
 
     #[regex(r"\$[\w]+", trim_string)]
-    Command(String),
+    EnvCommand(String),
 
     #[regex(r#""[^"\\]*(?:\\.[^"\\]*)*""#, trim_string)]
     String(String),
@@ -128,6 +136,13 @@ pub struct Token {
     span: Span,
 }
 
+impl Token {
+    #[inline]
+    pub const fn new(kind: TokenKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+}
+
 impl PartialEq for Token {
     fn eq(&self, other: &Self) -> bool {
         self.kind.eq(&other.kind)
@@ -143,67 +158,5 @@ impl Token {
     #[inline]
     pub const fn span(&self) -> &Span {
         &self.span
-    }
-}
-
-pub struct TokenSource<'a> {
-    pub src: &'a str,
-    pub row: usize,
-    pub col: usize,
-}
-
-struct LexerTokenizationIterator<'a>(logos::SpannedIter<'a, TokenKind>);
-impl Iterator for LexerTokenizationIterator<'_> {
-    type Item = Token;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (kind, span) = self.0.next()?;
-
-        Some(Token { kind, span })
-    }
-}
-
-pub struct LexerIterator<'a> {
-    src: &'a str,
-    lexer: std::iter::Peekable<LexerTokenizationIterator<'a>>,
-}
-
-impl LexerIterator<'_> {
-    pub fn src(&self) -> &str {
-        self.src
-    }
-
-    pub fn peek(&mut self) -> Option<&Token> {
-        self.lexer.peek()
-    }
-
-    pub fn find_token(&self, token: &Token) -> Option<TokenSource> {
-        let span_start = token.span().start;
-        let span_end = token.span().end;
-        let span_str = self.src.get(..span_end)?;
-        let (row, col) = span_str.lines().fold((0usize, 0usize), |(row, _), line| {
-            (row + 1, line.chars().count())
-        });
-
-        Some(TokenSource {
-            src: span_str.get(token.span().start..)?,
-            row,
-            col: col - (span_end - span_start),
-        })
-    }
-}
-
-impl Iterator for LexerIterator<'_> {
-    type Item = Token;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.lexer.next()
-    }
-}
-
-pub fn lexer(input: &str) -> LexerIterator {
-    LexerIterator {
-        src: input,
-        lexer: LexerTokenizationIterator(TokenKind::lexer(input).spanned()).peekable(),
     }
 }

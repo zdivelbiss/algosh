@@ -14,24 +14,24 @@ fn row_src(row: usize, src: &str) -> Option<&str> {
     src.lines().nth(row)
 }
 
-fn throw_error(src: &str, msg: &str, token: &lexer::TokenSource, panic: bool) {
-    println!("Error: {}", msg);
-    if let Some(row_src) = row_src(token.row, src) {
-        println!("\t{}", row_src);
-        println!(
-            "\t{:pad$}{:^underline$}",
-            "",
-            "",
-            pad = token.col,
-            underline = token.src.chars().count()
-        );
+fn throw_error(src: &str, msg: &str, token: Option<lexer::TokenSource>) -> ! {
+    println!("error: {}", msg);
+    if let Some(token) = token && let Some(row_src) = row_src(token.row, src) {
+        // use a 1's based value for the line number (clearer meani)
+        let row_num = (token.row + 1).to_string();
+        let row_num_digits = row_num.chars().count();
+        // print padding line
+        println!(" {: >row_num_digits$} |", "");
+        // print row string from source
+        println!(" {: >row_num_digits$} | {}", row_num, row_src);
+        // print token underline
+        println!(" {: >row_num_digits$} | {: >pad$}", "", "^".repeat(token.src.chars().count()), pad = (token.col + row_num_digits + 3));
     } else {
-        println!("Failed to load the error line. This is a compiler error.");
+        println!("Failed to load the error line.");
+        println!("This is a compiler error.")
     }
 
-    if panic {
-        loop {
-            std::thread::yield_now();
-        }
+    loop {
+        std::thread::yield_now();
     }
 }
