@@ -1,27 +1,48 @@
 use logos::{Lexer, Logos, Span};
 
+
 #[derive(Logos, Debug, Clone, PartialEq)]
 pub enum TokenKind {
     #[regex(r"[\s]+", logos::skip)]
     Discard,
 
+    #[token("|")]
+    ArgumentCell,
+    #[token(";")]
+    Terminator,
     #[token(",")]
     Separator,
+    #[token("?")]
+    Ternary,
+    #[token("->")]
+    Flow,
 
     #[token("{")]
     BlockOpen,
     #[token("}")]
     BlockClose,
 
-    #[token("if")]
-    StartCondition,
-    #[token("else")]
-    NextCondition,
+    #[token("(")]
+    TupleOpen,
+    #[token(")")]
+    TupleClose,
 
     #[token("[")]
     ArrayOpen,
     #[token("]")]
     ArrayClose,
+
+    #[token("const")]
+    ConstEval,
+    #[token("lazy")]
+    LazyEval,
+    #[token("eager")]
+    EagerEval,
+
+    #[token("if")]
+    StartCondition,
+    #[token("else")]
+    NextCondition,
 
     #[token(":+")]
     AddAssign,
@@ -68,20 +89,24 @@ pub enum TokenKind {
     #[token("=")]
     Eq,
 
+    #[token("||")]
+    OrCircuit,
     #[token("&&")]
     AndCircuit,
     #[token("&")]
     And,
 
-    #[token("||")]
-    OrCircuit,
-    #[token("|")]
-    Or,
-
     #[token("loop")]
     Loop,
     #[token("exit")]
     Exit,
+
+    #[token("Int")]
+    TypeInt,
+    #[token("Bool")]
+    TypeBool,
+    #[token("String")]
+    TypeString,
 
     #[regex(r"true|false", |lex| lex.slice().parse())]
     Boolean(bool),
@@ -95,11 +120,11 @@ pub enum TokenKind {
     #[regex(r#""[^"\\]*(?:\\.[^"\\]*)*""#, trim_string)]
     String(String),
 
-    #[regex(r"![\d]+", match_neg_integer)]
+    #[regex(r"![\d]+", parse_neg_integer)]
     #[regex(r"[\d]+", |lex| lex.slice().parse(), priority = 2)]
     Integer(isize),
 
-    #[regex(r"[\w]+", match_identifier)]
+    #[regex(r"[\w]+", parse_identifier)]
     Identifier(String),
 
     #[error]
@@ -117,11 +142,11 @@ fn trim_string(lexer: &mut Lexer<TokenKind>) -> Option<String> {
     )
 }
 
-fn match_neg_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
+fn parse_neg_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
     isize::from_str_radix(lexer.slice().replace('!', "-").as_str(), 10).ok()
 }
 
-fn match_identifier(lexer: &mut Lexer<TokenKind>) -> Option<String> {
+fn parse_identifier(lexer: &mut Lexer<TokenKind>) -> Option<String> {
     let identifier = lexer.slice();
     if !identifier.starts_with(|ch: char| ch.is_numeric()) {
         Some(identifier.to_string())
@@ -130,17 +155,10 @@ fn match_identifier(lexer: &mut Lexer<TokenKind>) -> Option<String> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Token {
     kind: TokenKind,
     span: Span,
-}
-
-impl Token {
-    #[inline]
-    pub const fn new(kind: TokenKind, span: Span) -> Self {
-        Self { kind, span }
-    }
 }
 
 impl PartialEq for Token {
@@ -151,6 +169,11 @@ impl PartialEq for Token {
 
 impl Token {
     #[inline]
+    pub const fn new(kind: TokenKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+
+    #[inline]
     pub const fn kind(&self) -> &TokenKind {
         &self.kind
     }
@@ -158,5 +181,11 @@ impl Token {
     #[inline]
     pub const fn span(&self) -> &Span {
         &self.span
+    }
+}
+
+impl std::fmt::Debug for Token {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_tuple("Token").field(self.kind()).finish()
     }
 }
