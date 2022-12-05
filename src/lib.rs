@@ -9,7 +9,7 @@
 )]
 
 pub mod lexer;
-pub mod minifier;
+pub mod linearizer;
 pub mod parser;
 pub mod strings;
 

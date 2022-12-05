@@ -12,11 +12,11 @@ static EXPR_SYNTAX_LEXER_TEST: &str = r#"
     lazy add_one: |a: Int| a + 1;
     lazy add_one_set: |set: [Int]| set => add_one;
     "#;
-static EXPR_PARSER_TEST: &str = "a + 1";
+static EXPR_PARSER_TEST: &str = "1 + 1";
 static EXPR_PARSER_TEST_ARRAY: &str = "lazy add_one: |a: Int| 1 + 1;";
 
 fn main() {
-    let lexer = crash::lexer::lexer(EXPR_PARSER_TEST_ARRAY);
+    let lexer = crash::lexer::lexer(EXPR_PARSER_TEST);
     let parser = crash::parser::Parser::new(lexer);
 
     for a in parser {

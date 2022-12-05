@@ -121,7 +121,7 @@ pub enum Expression {
     },
 
     Transform {
-        parameters: Vec<(Symbol, TypeKind)>,
+        params: Vec<(Symbol, TypeKind)>,
         next_expr: Box<Self>,
     },
 
@@ -145,7 +145,22 @@ pub enum Expression {
         next_expr: Box<Self>,
     },
 
-    Terminator,
+    Termination,
+}
+
+impl Expression {
+    fn next(&self) -> Option<&Box<Self>> {
+        match self {
+            Expression::Evaluation { kind, next_expr } => Some(next_expr),
+            Expression::Transform { params, next_expr } => Some(next_expr),
+            Expression::Binary { kind, next_expr } => Some(next_expr),
+            Expression::Named { name, next_expr } => Some(next_expr),
+            Expression::Value { kind, next_expr } => Some(next_expr),
+            Expression::Type { kind, next_expr } => Some(next_expr),
+
+            Expression::Termination => None,
+        }
+    }
 }
 
 impl TryFrom<&mut Parser<'_>> for Expression {
@@ -157,7 +172,7 @@ impl TryFrom<&mut Parser<'_>> for Expression {
             &TokenKind::Terminator => {
                 parser.discard();
 
-                Ok(Self::Terminator)
+                Ok(Self::Termination)
             },
 
             &TokenKind::ParameterBrace => {
@@ -207,10 +222,19 @@ impl TryFrom<&mut Parser<'_>> for Expression {
                 }
 
                 Ok(Self::Transform {
-                    parameters,
+                    params: parameters,
                     next_expr: Box::new(Self::try_from(parser)?),
                 })
             }
+
+            kind if let &TokenKind::Identifier(name) = kind => {
+                parser.discard();
+
+                Ok(Self::Named {
+                    name,
+                    next_expr: Box::new(Self::try_from(parser)?),
+                })
+            },
 
             kind if let Ok(eval_kind) = EvalKind::try_from(kind) => {
                 parser.discard();
@@ -235,15 +259,6 @@ impl TryFrom<&mut Parser<'_>> for Expression {
 
                 Ok(Self::Value { kind: value_kind, next_expr: Box::new(Self::try_from(parser)?) })
             }
-
-            kind if let &TokenKind::Identifier(name) = kind => {
-                parser.discard();
-
-                Ok(Self::Named {
-                    name,
-                    next_expr: Box::new(Self::try_from(parser)?),
-                })
-            },
 
             kind => panic!("NOT YET IMPLEMENTED {:?}", kind),
         }
