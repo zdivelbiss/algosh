@@ -18,5 +18,8 @@ pub fn intern_str(string: &str) -> Symbol {
 
 pub fn get_intern_str(symbol: Symbol) -> String {
     let cache = STRING_CACHE.read();
-    cache.get(symbol).expect("unknown symbol for symbol table").to_string()
+    cache
+        .get(symbol)
+        .expect("unknown symbol for symbol table")
+        .to_string()
 }

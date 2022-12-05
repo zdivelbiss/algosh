@@ -7,7 +7,7 @@ pub enum TokenKind {
     Discard,
 
     #[token("|")]
-    ArgumentCell,
+    ParameterBrace,
     #[token(";")]
     Terminator,
     #[token(",")]
@@ -33,11 +33,11 @@ pub enum TokenKind {
     ArrayClose,
 
     #[token("const")]
-    ConstEval,
+    EvalConst,
     #[token("lazy")]
-    LazyEval,
+    EvalLazy,
     #[token("eager")]
-    EagerEval,
+    EvalEager,
 
     #[token("if")]
     StartCondition,
@@ -109,7 +109,7 @@ pub enum TokenKind {
     TypeString,
 
     #[regex(r"true|false", |lex| lex.slice().parse())]
-    Boolean(bool),
+    Bool(bool),
 
     #[regex(r#"\$"[\w]+""#, trim_and_cache)]
     EnvVar(Symbol),
@@ -122,7 +122,7 @@ pub enum TokenKind {
 
     #[regex(r"![\d]+", parse_neg_integer)]
     #[regex(r"[\d]+", |lex| lex.slice().parse(), priority = 2)]
-    Integer(isize),
+    Int(isize),
 
     #[regex(r"[A-Za-z_][\w]*", trim_and_cache)]
     Identifier(Symbol),
@@ -142,7 +142,7 @@ fn trim_and_cache(lexer: &mut Lexer<TokenKind>) -> Option<Symbol> {
 }
 
 fn parse_neg_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
-    isize::from_str_radix(lexer.slice().replace('!', "-").as_str(), 10).ok()
+    lexer.slice().replace('!', "-").as_str().parse().ok()
 }
 
 #[derive(Clone)]
