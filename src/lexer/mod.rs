@@ -10,7 +10,7 @@ pub struct TokenSource<'a> {
 }
 
 struct LexerTokenizationIterator<'a>(logos::SpannedIter<'a, TokenKind>);
-impl Iterator for LexerTokenizationIterator<'_> {
+impl<'a> Iterator for LexerTokenizationIterator<'a> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {

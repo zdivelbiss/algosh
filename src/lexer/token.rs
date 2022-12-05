@@ -1,5 +1,5 @@
+use intaglio::Symbol;
 use logos::{Lexer, Logos, Span};
-
 
 #[derive(Logos, Debug, Clone, PartialEq)]
 pub enum TokenKind {
@@ -14,7 +14,7 @@ pub enum TokenKind {
     Separator,
     #[token("?")]
     Ternary,
-    #[token("->")]
+    #[token("=>")]
     Flow,
 
     #[token("{")]
@@ -111,48 +111,38 @@ pub enum TokenKind {
     #[regex(r"true|false", |lex| lex.slice().parse())]
     Boolean(bool),
 
-    #[regex(r#"\$"[\w]+""#, trim_string)]
-    EnvVar(String),
+    #[regex(r#"\$"[\w]+""#, trim_and_cache)]
+    EnvVar(Symbol),
 
-    #[regex(r"\$[\w]+", trim_string)]
-    EnvCommand(String),
+    #[regex(r"\$[\w]+", trim_and_cache)]
+    EnvCommand(Symbol),
 
-    #[regex(r#""[^"\\]*(?:\\.[^"\\]*)*""#, trim_string)]
-    String(String),
+    #[regex(r#""[^"\\]*(?:\\.[^"\\]*)*""#, trim_and_cache)]
+    String(Symbol),
 
     #[regex(r"![\d]+", parse_neg_integer)]
     #[regex(r"[\d]+", |lex| lex.slice().parse(), priority = 2)]
     Integer(isize),
 
-    #[regex(r"[\w]+", parse_identifier)]
-    Identifier(String),
+    #[regex(r"[A-Za-z_][\w]*", trim_and_cache)]
+    Identifier(Symbol),
 
     #[error]
     Unknown,
 }
 
-fn trim_string(lexer: &mut Lexer<TokenKind>) -> Option<String> {
-    Some(
+fn trim_and_cache(lexer: &mut Lexer<TokenKind>) -> Option<Symbol> {
+    Some(crate::strings::intern_str(
         lexer
             .slice()
             .trim_start_matches('$')
             .trim_start_matches('"')
-            .trim_end_matches('"')
-            .to_string(),
-    )
+            .trim_end_matches('"'),
+    ))
 }
 
 fn parse_neg_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
     isize::from_str_radix(lexer.slice().replace('!', "-").as_str(), 10).ok()
-}
-
-fn parse_identifier(lexer: &mut Lexer<TokenKind>) -> Option<String> {
-    let identifier = lexer.slice();
-    if !identifier.starts_with(|ch: char| ch.is_numeric()) {
-        Some(identifier.to_string())
-    } else {
-        None
-    }
 }
 
 #[derive(Clone)]
@@ -181,6 +171,11 @@ impl Token {
     #[inline]
     pub const fn span(&self) -> &Span {
         &self.span
+    }
+
+    #[inline]
+    pub const fn take_kind(self) -> TokenKind {
+        self.kind
     }
 }
 
