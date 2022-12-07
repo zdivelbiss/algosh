@@ -194,7 +194,7 @@ impl TryFrom<&mut Parser<'_>> for Expression {
                 loop {
                     let name = parser.expect_with(|t| {
                         if let TokenKind::Identifier(name) = t.kind() {
-                            Ok(name.clone())
+                            Ok(*name)
                         } else {
                             Err(ParserError::FoundMsg {
                                 found: Some(t.clone()),
@@ -205,7 +205,7 @@ impl TryFrom<&mut Parser<'_>> for Expression {
                 
                     parser.expect(&token!( TokenKind::Assign))?;
                     parameters.push((
-                        name.clone(),
+                        name,
                         parser.expect_with(|t| {
                             TypeKind::try_from(t.kind()).map_err(|_| ParserError::FoundMsg {
                                 found: Some(t.clone()),

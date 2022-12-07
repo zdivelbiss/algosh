@@ -119,7 +119,6 @@ pub enum TokenKind {
     #[regex(r"\$[\w]+", trim_and_cache)]
     EnvCmd(Symbol),
 
-
     #[regex(r"[A-Za-z_][\w]*", trim_and_cache)]
     Identifier(Symbol),
 
@@ -141,7 +140,7 @@ fn parse_neg_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
     lexer.slice().replace('!', "-").as_str().parse().ok()
 }
 
-#[derive(Clone, Hash)]
+#[derive(Clone)]
 pub struct Token {
     kind: TokenKind,
     span: Span,
@@ -200,10 +199,10 @@ impl std::fmt::Debug for Token {
 #[macro_export]
 macro_rules! token {
     ($kind:expr) => {
-        crate::lexer::Token::without_span($kind)
+        $crate::lexer::Token::without_span($kind)
     };
 
     ($kind:expr, $span:expr) => {
-        crate::lexer::Token::new($kind, $span)
+        $crate::lexer::Token::new($kind, $span)
     };
 }
