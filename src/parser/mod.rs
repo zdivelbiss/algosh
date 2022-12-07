@@ -78,7 +78,6 @@ impl<'a> Parser<'a> {
             Some(t) => self.tokens.find_token(&t),
             None => None,
         };
-
         crate::throw_error(msg, Some(self.tokens.src()), token_src)
     }
 }

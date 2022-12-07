@@ -119,6 +119,7 @@ pub enum TokenKind {
     #[regex(r"\$[\w]+", trim_and_cache)]
     EnvCmd(Symbol),
 
+
     #[regex(r"[A-Za-z_][\w]*", trim_and_cache)]
     Identifier(Symbol),
 
@@ -140,7 +141,7 @@ fn parse_neg_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
     lexer.slice().replace('!', "-").as_str().parse().ok()
 }
 
-#[derive(Clone)]
+#[derive(Clone, Hash)]
 pub struct Token {
     kind: TokenKind,
     span: Span,
