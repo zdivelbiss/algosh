@@ -1,7 +1,7 @@
 use intaglio::Symbol;
 use logos::{Lexer, Logos, Span};
 
-#[derive(Logos, Debug, Clone, PartialEq)]
+#[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     #[regex(r"[\s]+", logos::skip)]
     Discard,
@@ -9,7 +9,7 @@ pub enum TokenKind {
     #[token("|")]
     ParameterBrace,
     #[token(";")]
-    Terminator,
+    StatementEnd,
     #[token(",")]
     Separator,
     #[token("?")]
@@ -17,16 +17,14 @@ pub enum TokenKind {
     #[token("=>")]
     Flow,
 
-    #[token("{")]
-    BlockOpen,
-    #[token("}")]
-    BlockClose,
-
     #[token("(")]
-    TupleOpen,
+    GroupingOpen,
     #[token(")")]
+    GroupingClose,
+    #[token("{")]
+    TupleOpen,
+    #[token("}")]
     TupleClose,
-
     #[token("[")]
     ArrayOpen,
     #[token("]")]
@@ -108,21 +106,18 @@ pub enum TokenKind {
     #[token("String")]
     TypeString,
 
+    #[regex(r"![\d]+", parse_neg_integer)]
+    #[regex(r"[\d]+", |lex| lex.slice().parse(), priority = 2)]
+    Integer(isize),
     #[regex(r"true|false", |lex| lex.slice().parse())]
-    Bool(bool),
-
-    #[regex(r#"\$"[\w]+""#, trim_and_cache)]
-    EnvVar(Symbol),
-
-    #[regex(r"\$[\w]+", trim_and_cache)]
-    EnvCommand(Symbol),
-
+    Boolean(bool),
     #[regex(r#""[^"\\]*(?:\\.[^"\\]*)*""#, trim_and_cache)]
     String(Symbol),
 
-    #[regex(r"![\d]+", parse_neg_integer)]
-    #[regex(r"[\d]+", |lex| lex.slice().parse(), priority = 2)]
-    Int(isize),
+    #[regex(r#"\$"[\w]+""#, trim_and_cache)]
+    EnvVar(Symbol),
+    #[regex(r"\$[\w]+", trim_and_cache)]
+    EnvCmd(Symbol),
 
     #[regex(r"[A-Za-z_][\w]*", trim_and_cache)]
     Identifier(Symbol),
@@ -151,9 +146,20 @@ pub struct Token {
     span: Span,
 }
 
+impl Eq for Token {}
 impl PartialEq for Token {
     fn eq(&self, other: &Self) -> bool {
-        self.kind.eq(&other.kind)
+        // Equality comparisons for tokens use only the type, not their values.
+        match (self.kind(), other.kind()) {
+            (TokenKind::Integer(_), TokenKind::Integer(_))
+            | (TokenKind::Boolean(_), TokenKind::Boolean(_))
+            | (TokenKind::String(_), TokenKind::String(_))
+            | (TokenKind::Identifier(_), TokenKind::Identifier(_))
+            | (TokenKind::EnvVar(_), TokenKind::EnvVar(_))
+            | (TokenKind::EnvCmd(_), TokenKind::EnvCmd(_)) => true,
+
+            (slf, other) => slf.eq(other),
+        }
     }
 }
 
@@ -164,12 +170,17 @@ impl Token {
     }
 
     #[inline]
+    pub const fn without_span(kind: TokenKind) -> Self {
+        Self { kind, span: 0..0 }
+    }
+
+    #[inline]
     pub const fn kind(&self) -> &TokenKind {
         &self.kind
     }
 
     #[inline]
-    pub const fn span(&self) -> &Span {
+    pub fn span(&self) -> &Span {
         &self.span
     }
 
@@ -183,4 +194,15 @@ impl std::fmt::Debug for Token {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.debug_tuple("Token").field(self.kind()).finish()
     }
+}
+
+#[macro_export]
+macro_rules! token {
+    ($kind:expr) => {
+        crate::lexer::Token::without_span($kind)
+    };
+
+    ($kind:expr, $span:expr) => {
+        crate::lexer::Token::new($kind, $span)
+    };
 }

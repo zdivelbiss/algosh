@@ -8,15 +8,17 @@
     option_result_contains
 )]
 
+// pub mod linearizer;
 pub mod lexer;
-pub mod linearizer;
 pub mod parser;
 pub mod strings;
 
+#[allow(dead_code)]
 fn row_src(row: usize, src: &str) -> Option<&str> {
     src.lines().nth(row)
 }
 
+#[allow(dead_code)]
 fn throw_error(msg: &str, src: Option<&str>, token: Option<lexer::TokenSource>) -> ! {
     println!("error: {}", msg);
     if let Some(token) = token

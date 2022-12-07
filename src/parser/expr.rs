@@ -1,9 +1,10 @@
-use intaglio::Symbol;
-
 use crate::{
-    lexer::TokenKind,
+    lexer::{TokenKind, },
     parser::{Parser, ParserError},
+    token,
 };
+use intaglio::Symbol;
+use std::borrow::BorrowMut;
 
 #[derive(Debug, PartialEq)]
 pub enum EvalKind {
@@ -21,8 +22,7 @@ impl TryFrom<&TokenKind> for EvalKind {
             TokenKind::EvalEager => Ok(Self::Eager),
             TokenKind::EvalConst => Ok(Self::Const),
 
-            // Pass `Unknown` error to avoid returning large errors from frequently-called functions.
-            _ => Err(ParserError::Discard),
+            _ => Err(ParserError::UnexpectedToken),
         }
     }
 }
@@ -55,8 +55,7 @@ impl TryFrom<&TokenKind> for OperatorKind {
             TokenKind::NegEq => Ok(Self::NegEq),
             TokenKind::Assign => Ok(Self::Assign),
 
-            // Pass `Unknown` error to avoid returning large errors from frequently-called functions.
-            _ => Err(ParserError::Discard),
+            _ => Err(ParserError::UnexpectedToken),
         }
     }
 }
@@ -79,7 +78,7 @@ impl TryFrom<&TokenKind> for TypeKind {
             TokenKind::TypeBool => Ok(Self::Bool),
             TokenKind::TypeString => Ok(Self::String),
 
-            _ => Err(ParserError::Discard),
+            _ => Err(ParserError::UnexpectedToken),
         }
     }
 }
@@ -98,11 +97,11 @@ impl TryFrom<&TokenKind> for ValueKind {
 
     fn try_from(kind: &TokenKind) -> Result<Self, Self::Error> {
         match kind {
-            TokenKind::Int(int) => Ok(Self::Int(*int)),
-            TokenKind::Bool(bool) => Ok(Self::Bool(*bool)),
+            TokenKind::Integer(int) => Ok(Self::Int(*int)),
+            TokenKind::Boolean(bool) => Ok(Self::Bool(*bool)),
             TokenKind::String(string) => Ok(Self::String(*string)),
 
-            _ => Err(ParserError::Discard),
+            _ => Err(ParserError::UnexpectedToken),
         }
     }
 }
@@ -121,7 +120,7 @@ pub enum Expression {
     },
 
     Transform {
-        params: Vec<(Symbol, TypeKind)>,
+        parameters: Vec<(Symbol, TypeKind)>,
         next_expr: Box<Self>,
     },
 
@@ -145,22 +144,14 @@ pub enum Expression {
         next_expr: Box<Self>,
     },
 
-    Termination,
-}
+    Grouping {
+        group: Box<Self>,
+        next_expr: Box<Self>,
+    },
 
-impl Expression {
-    fn next(&self) -> Option<&Box<Self>> {
-        match self {
-            Expression::Evaluation { kind, next_expr } => Some(next_expr),
-            Expression::Transform { params, next_expr } => Some(next_expr),
-            Expression::Binary { kind, next_expr } => Some(next_expr),
-            Expression::Named { name, next_expr } => Some(next_expr),
-            Expression::Value { kind, next_expr } => Some(next_expr),
-            Expression::Type { kind, next_expr } => Some(next_expr),
+    GroupingEnd,
 
-            Expression::Termination => None,
-        }
-    }
+    Terminator,
 }
 
 impl TryFrom<&mut Parser<'_>> for Expression {
@@ -168,76 +159,87 @@ impl TryFrom<&mut Parser<'_>> for Expression {
     type Error = ParserError;
 
     fn try_from(parser: &mut Parser<'_>) -> Result<Self, Self::Error> {
-        match parser.peek().ok_or(ParserError::NoMoreTokens)? {
-            &TokenKind::Terminator => {
-                parser.discard();
+        // If there are no more tokens left in the parser, simply return a terminator.
+        // An error with this kind of behaviour will result in an infinite loop.
+        let peek = match parser.peek() {
+            Some(peek) => peek,
+            None => return Ok(Self::Terminator),
+        };
 
-                Ok(Self::Termination)
+        match peek.kind() {
+            TokenKind::StatementEnd => {
+                parser.advance();
+
+                Ok(Self::Terminator)
             },
 
-            &TokenKind::ParameterBrace => {
-                parser.discard();
+            TokenKind::GroupingOpen => {
+                parser.advance();
+
+                let inner_expr = Self::try_from(parser.borrow_mut())?;
+                parser.expect(&token!(TokenKind::GroupingClose))?;
+
+                Ok(Expression::Grouping {
+                    group: Box::new(inner_expr),
+                    next_expr: Box::new(Self::try_from(parser.borrow_mut())?)
+                })
+            },
+
+            TokenKind::GroupingClose => Ok(Expression::GroupingEnd),
+
+            TokenKind::ParameterBrace => {
+                parser.advance();
 
                 let mut parameters = Vec::new();
                 loop {
-                    let name = parser.expect_with(|kind| match kind {
-                        &TokenKind::Identifier(name) => Ok(name),
-
-                        kind => Err(ParserError::FoundMsg {
-                            found: Some(kind.clone()),
-                            msg: "expected identifier (hint: parameter format is `name: Int`)"
-                                .to_string(),
-                        }),
+                    let name = parser.expect_with(|t| {
+                        if let TokenKind::Identifier(name) = t.kind() {
+                            Ok(name.clone())
+                        } else {
+                            Err(ParserError::FoundMsg {
+                                found: Some(t.clone()),
+                                msg: String::from("expected identifier (hint: parameter format is `name: Int`)"),
+                            })
+                        }
                     })?;
-                    parser.expect(&TokenKind::Assign)?;
+                
+                    parser.expect(&token!( TokenKind::Assign))?;
                     parameters.push((
-                        name,
-                        parser.expect_with(|kind| {
-                            TypeKind::try_from(kind).map_err(|_| ParserError::FoundMsg {
-                                found: Some(kind.clone()),
-                                msg: "parameter declaration expects type".to_string(),
+                        name.clone(),
+                        parser.expect_with(|t| {
+                            TypeKind::try_from(t.kind()).map_err(|_| ParserError::FoundMsg {
+                                found: Some(t.clone()),
+                                msg: String::from( "parameter declaration expects type"),
                             })
                         })?,
                     ));
 
-                    match parser.peek() {
+                    match parser.peek().map(crate::lexer::Token::kind) {
                         Some(&TokenKind::ParameterBrace) => {
-                            parser.discard();
+                            parser.advance();
 
                             break
                         },
                         Some(&TokenKind::Separator) => {
-                            parser.discard();
+                            parser.advance();
 
                             continue
                         },
 
                         _ => {
-                            return Err(ParserError::General(
-                                "expected parameter separator `,` or parameter brace `|`"
-                                    .to_string(),
-                            ))
+                            return Err(ParserError::ReplaceThisError)
                         }
                     }
                 }
 
                 Ok(Self::Transform {
-                    params: parameters,
+                    parameters,
                     next_expr: Box::new(Self::try_from(parser)?),
                 })
             }
 
-            kind if let &TokenKind::Identifier(name) = kind => {
-                parser.discard();
-
-                Ok(Self::Named {
-                    name,
-                    next_expr: Box::new(Self::try_from(parser)?),
-                })
-            },
-
             kind if let Ok(eval_kind) = EvalKind::try_from(kind) => {
-                parser.discard();
+                parser.advance();
 
                 Ok(Self::Evaluation {
                     kind: eval_kind,
@@ -246,7 +248,7 @@ impl TryFrom<&mut Parser<'_>> for Expression {
             },
 
             kind if let Ok(operator_kind) = OperatorKind::try_from(kind) => {
-                parser.discard();
+                parser.advance();
 
                 Ok(Self::Binary {
                     kind: operator_kind,
@@ -255,10 +257,20 @@ impl TryFrom<&mut Parser<'_>> for Expression {
             },
 
             kind if let Ok(value_kind) = ValueKind::try_from(kind) => {
-                parser.discard();
+                parser.advance();
 
                 Ok(Self::Value { kind: value_kind, next_expr: Box::new(Self::try_from(parser)?) })
             }
+
+            kind if let &TokenKind::Identifier(name) = kind => {
+                parser.advance();
+
+                Ok(Self::Named {
+                    name,
+                    next_expr: Box::new(Self::try_from(parser)?),
+                })
+            },
+
 
             kind => panic!("NOT YET IMPLEMENTED {:?}", kind),
         }
