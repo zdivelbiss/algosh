@@ -6,6 +6,9 @@ pub enum TokenKind {
     #[regex(r"[\s]+", logos::skip)]
     Discard,
 
+    #[regex(r"#\[.]?\]", |lex| lex.slice().parse())]
+    Preprocess(String),
+
     #[token("|")]
     ParameterBrace,
     #[token(";")]
@@ -29,13 +32,6 @@ pub enum TokenKind {
     ArrayOpen,
     #[token("]")]
     ArrayClose,
-
-    #[token("const")]
-    EvalConst,
-    #[token("lazy")]
-    EvalLazy,
-    #[token("eager")]
-    EvalEager,
 
     #[token("if")]
     StartCondition,

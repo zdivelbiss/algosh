@@ -7,27 +7,6 @@ use intaglio::Symbol;
 use std::borrow::BorrowMut;
 
 #[derive(Debug, PartialEq)]
-pub enum EvalKind {
-    Lazy,
-    Eager,
-    Const,
-}
-
-impl TryFrom<&TokenKind> for EvalKind {
-    type Error = ParserError;
-
-    fn try_from(kind: &TokenKind) -> Result<Self, Self::Error> {
-        match kind {
-            TokenKind::EvalLazy => Ok(Self::Lazy),
-            TokenKind::EvalEager => Ok(Self::Eager),
-            TokenKind::EvalConst => Ok(Self::Const),
-
-            _ => Err(ParserError::UnexpectedToken),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
 pub enum OperatorKind {
     Eq,
     NegEq,
