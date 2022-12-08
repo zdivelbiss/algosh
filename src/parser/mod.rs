@@ -7,6 +7,8 @@ use crate::lexer::Token;
 pub enum ParserError {
     UnexpectedToken,
 
+    NoMoreTokens,
+
     Expected {
         expected: Token,
         found: Option<Token>,
@@ -87,7 +89,7 @@ impl Iterator for Parser<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.tokens.peek().is_some() {
-            match Expression::try_from(self) {
+            match expr::parse_expr(self) {
                 Ok(expr) => Some(expr),
 
                 Err(ParserError::ReplaceThisError) => {

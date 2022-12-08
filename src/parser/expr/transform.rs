@@ -6,15 +6,13 @@ use crate::{
     token,
 };
 
-struct Transform {
+pub struct Transform {
     parameters: Vec<(Symbol, TypeKind)>,
     next_expr: HeapExpr,
 }
 
 impl Expression for Transform {
-    type Error = ParserError;
-
-    fn try_reduce(&mut self) -> Result<(), Self::Error> {
+    fn try_reduce(&mut self) -> Result<(), ParserError> {
         todo!()
     }
 }

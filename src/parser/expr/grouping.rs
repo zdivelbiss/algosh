@@ -1,3 +1,5 @@
+use std::borrow::BorrowMut;
+
 use crate::{
     lexer::TokenKind,
     parser::expr::{Expression, HeapExpr, Parser, ParserError},
@@ -10,9 +12,7 @@ pub struct Grouping {
 }
 
 impl Expression for Grouping {
-    type Error = ParserError;
-
-    fn try_reduce(&mut self) -> Result<(), Self::Error> {
+    fn try_reduce(&mut self) -> Result<(), ParserError> {
         todo!()
     }
 }
@@ -22,7 +22,7 @@ impl TryFrom<&mut Parser<'_>> for Grouping {
 
     fn try_from(parser: &mut Parser<'_>) -> Result<Self, Self::Error> {
         parser.expect(&token!(TokenKind::GroupingOpen));
-        let inner_expr = Self::try_from(parser)?;
+        let inner_expr = Self::try_from(parser.borrow_mut())?;
         parser.expect(&token!(TokenKind::GroupingClose))?;
 
         Ok(Self {
@@ -35,8 +35,7 @@ impl TryFrom<&mut Parser<'_>> for Grouping {
 pub struct GroupingEnd;
 
 impl Expression for GroupingEnd {
-    type Error = ParserError;
-    fn try_reduce(&mut self) -> Result<(), Self::Error> {
+    fn try_reduce(&mut self) -> Result<(), ParserError> {
         Ok(())
     }
 }

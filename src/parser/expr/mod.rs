@@ -4,13 +4,17 @@ pub use grouping::*;
 mod transform;
 pub use transform::*;
 
+mod terminator;
+pub use terminator::*;
+
+mod value;
+pub use value::*;
+
 use crate::{
-    lexer::{Token, TokenKind},
+    lexer::TokenKind,
     parser::{Parser, ParserError},
-    token,
 };
 use intaglio::Symbol;
-use std::borrow::BorrowMut;
 
 #[derive(Debug, PartialEq)]
 pub enum OperatorKind {
@@ -68,42 +72,11 @@ impl TryFrom<&TokenKind> for TypeKind {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum ValueKind {
-    Int(isize),
-    Bool(bool),
-    String(Symbol),
-    Array(Vec<Box<Self>>),
-    Tuple(Vec<Box<Self>>),
-}
-
-impl TryFrom<&TokenKind> for ValueKind {
-    type Error = ParserError;
-
-    fn try_from(kind: &TokenKind) -> Result<Self, Self::Error> {
-        match kind {
-            TokenKind::Integer(int) => Ok(Self::Int(*int)),
-            TokenKind::Boolean(bool) => Ok(Self::Bool(*bool)),
-            TokenKind::String(string) => Ok(Self::String(*string)),
-
-            _ => Err(ParserError::UnexpectedToken),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Argument {
-    name: Symbol,
-    ty: TypeKind,
-}
-
 pub trait Expression {
-    type Error;
-
-    fn try_reduce(&mut self) -> Result<(), Self::Error>;
+    fn try_reduce(&mut self) -> Result<(), ParserError>;
 }
 
-pub type HeapExpr = Box<dyn Expression<Error = ParserError>>;
+pub type HeapExpr = Box<dyn Expression>;
 
 struct Binary {
     kind: OperatorKind,
@@ -115,23 +88,28 @@ struct Named {
     next_expr: HeapExpr,
 }
 
-struct Value {
-    kind: ValueKind,
-    next_expr: HeapExpr,
-}
-
 struct Type {
     kind: TypeKind,
     next_expr: HeapExpr,
 }
 
-pub struct Terminator;
-impl Expression for Terminator {
-    type Error = ParserError;
-    fn try_reduce(&mut self) -> Result<(), Self::Error> {
-        Ok(())
+pub fn parse_expr(parser: &mut Parser) -> Result<HeapExpr, ParserError> {
+    if !parser.peek().is_some() {
+        return Ok(Box::new(Terminator));
     }
+
+    fn into_boxed_expr<T: Expression + 'static>(
+        expr: Result<T, ParserError>,
+    ) -> Result<HeapExpr, ParserError> {
+        expr.map(|e| Box::new(e) as Box<dyn Expression>)
+    }
+
+    into_boxed_expr(Terminator::try_from(parser))
+        .or_else(|_| into_boxed_expr(Grouping::try_from(parser)))
+        .or_else(|_| into_boxed_expr(Transform::try_from(parser)))
+        .or_else(|_| into_boxed_expr(Value::try_from(parser)))
 }
+
 /*
 impl TryFrom<&mut Parser<'_>> for Expression {
     // FIXME: don't use static lifetime here
