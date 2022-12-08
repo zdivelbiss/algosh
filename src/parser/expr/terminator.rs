@@ -4,6 +4,7 @@ use crate::{
     token,
 };
 
+#[derive(Debug)]
 pub struct Terminator;
 
 impl Expression for Terminator {

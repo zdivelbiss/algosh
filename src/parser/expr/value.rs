@@ -28,6 +28,7 @@ impl TryFrom<&TokenKind> for ValueKind {
     }
 }
 
+#[derive(Debug)]
 pub struct Value {
     kind: ValueKind,
     next_expr: HeapExpr,

@@ -1,4 +1,6 @@
 mod grouping;
+use std::borrow::BorrowMut;
+
 pub use grouping::*;
 
 mod transform;
@@ -72,7 +74,7 @@ impl TryFrom<&TokenKind> for TypeKind {
     }
 }
 
-pub trait Expression {
+pub trait Expression: core::fmt::Debug {
     fn try_reduce(&mut self) -> Result<(), ParserError>;
 }
 
@@ -104,10 +106,10 @@ pub fn parse_expr(parser: &mut Parser) -> Result<HeapExpr, ParserError> {
         expr.map(|e| Box::new(e) as Box<dyn Expression>)
     }
 
-    into_boxed_expr(Terminator::try_from(parser))
-        .or_else(|_| into_boxed_expr(Grouping::try_from(parser)))
-        .or_else(|_| into_boxed_expr(Transform::try_from(parser)))
-        .or_else(|_| into_boxed_expr(Value::try_from(parser)))
+    into_boxed_expr(Terminator::try_from(parser.borrow_mut()))
+        .or_else(|_| into_boxed_expr(Grouping::try_from(parser.borrow_mut())))
+        .or_else(|_| into_boxed_expr(Transform::try_from(parser.borrow_mut())))
+        .or_else(|_| into_boxed_expr(Value::try_from(parser.borrow_mut())))
 }
 
 /*

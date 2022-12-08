@@ -6,6 +6,7 @@ use crate::{
     token,
 };
 
+#[derive(Debug)]
 pub struct Transform {
     parameters: Vec<(Symbol, TypeKind)>,
     next_expr: HeapExpr,
@@ -25,17 +26,21 @@ impl TryFrom<&mut Parser<'_>> for Transform {
 
         let mut parameters = Vec::new();
         loop {
-            let Some(TokenKind::Identifier(name)) = parser.peek().map(Token::kind)
-            else {
-                return Err(ParserError::FoundMsg {
-                    found: parser.peek().cloned(),
-                    msg: String::from("expected identifier (hint: parameter format is `name: Int`)")
-                });
+            let name = match parser.peek().map(Token::kind) {
+                Some(TokenKind::Identifier(name)) => *name,
+                _ => {
+                    return Err(ParserError::FoundMsg {
+                        found: parser.peek().cloned(),
+                        msg: String::from(
+                            "expected identifier (hint: parameter format is `name: Int`)",
+                        ),
+                    })
+                }
             };
 
             parser.expect(&token!(TokenKind::Assign))?;
             parameters.push((
-                *name,
+                name,
                 parser.expect_with(|t| {
                     TypeKind::try_from(t.kind()).map_err(|_| ParserError::FoundMsg {
                         found: Some(t.clone()),
@@ -61,7 +66,7 @@ impl TryFrom<&mut Parser<'_>> for Transform {
 
         Ok(Self {
             parameters,
-            next_expr: Box::new(Self::try_from(parser)?),
+            next_expr: super::parse_expr(parser)?,
         })
     }
 }
