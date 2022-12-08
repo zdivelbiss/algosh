@@ -1,5 +1,11 @@
+mod grouping;
+pub use grouping::*;
+
+mod transform;
+pub use transform::*;
+
 use crate::{
-    lexer::TokenKind,
+    lexer::{Token, TokenKind},
     parser::{Parser, ParserError},
     token,
 };
@@ -91,50 +97,42 @@ pub struct Argument {
     ty: TypeKind,
 }
 
-trait Expression1 {}
+pub trait Expression {
+    type Error;
 
-struct Transform {
-    parameters: Vec<(Symbol, TypeKind)>,
-    expr: Box<dyn Expression1>
+    fn try_reduce(&mut self) -> Result<(), Self::Error>;
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Expression {
-    Transform {
-        parameters: Vec<(Symbol, TypeKind)>,
-        next_expr: Box<Self>,
-    },
+pub type HeapExpr = Box<dyn Expression<Error = ParserError>>;
 
-    Binary {
-        kind: OperatorKind,
-        next_expr: Box<Self>,
-    },
-
-    Named {
-        name: Symbol,
-        next_expr: Box<Self>,
-    },
-
-    Value {
-        kind: ValueKind,
-        next_expr: Box<Self>,
-    },
-
-    Type {
-        kind: TypeKind,
-        next_expr: Box<Self>,
-    },
-
-    Grouping {
-        group: Box<Self>,
-        next_expr: Box<Self>,
-    },
-
-    GroupingEnd,
-
-    Terminator,
+struct Binary {
+    kind: OperatorKind,
+    next_expr: HeapExpr,
 }
 
+struct Named {
+    name: Symbol,
+    next_expr: HeapExpr,
+}
+
+struct Value {
+    kind: ValueKind,
+    next_expr: HeapExpr,
+}
+
+struct Type {
+    kind: TypeKind,
+    next_expr: HeapExpr,
+}
+
+pub struct Terminator;
+impl Expression for Terminator {
+    type Error = ParserError;
+    fn try_reduce(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+/*
 impl TryFrom<&mut Parser<'_>> for Expression {
     // FIXME: don't use static lifetime here
     type Error = ParserError;
@@ -153,6 +151,8 @@ impl TryFrom<&mut Parser<'_>> for Expression {
 
                 Ok(Self::Terminator)
             },
+
+
 
             TokenKind::GroupingOpen => {
                 parser.advance();
@@ -248,3 +248,4 @@ impl TryFrom<&mut Parser<'_>> for Expression {
         }
     }
 }
+*/

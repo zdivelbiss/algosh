@@ -83,7 +83,7 @@ impl<'a> Parser<'a> {
 }
 
 impl Iterator for Parser<'_> {
-    type Item = Expression;
+    type Item = expr::HeapExpr;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.tokens.peek().is_some() {
