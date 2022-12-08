@@ -12,44 +12,14 @@ pub use terminator::*;
 mod value;
 pub use value::*;
 
+mod binary;
+pub use binary::*;
+
 use crate::{
     lexer::TokenKind,
     parser::{Parser, ParserError},
 };
 use intaglio::Symbol;
-
-#[derive(Debug, PartialEq)]
-pub enum OperatorKind {
-    Eq,
-    NegEq,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Shr,
-    Shl,
-    Assign,
-}
-
-impl TryFrom<&TokenKind> for OperatorKind {
-    type Error = ParserError;
-
-    fn try_from(kind: &TokenKind) -> Result<Self, Self::Error> {
-        match kind {
-            TokenKind::Add => Ok(Self::Add),
-            TokenKind::Sub => Ok(Self::Sub),
-            TokenKind::Mul => Ok(Self::Mul),
-            TokenKind::Div => Ok(Self::Div),
-            TokenKind::Shr => Ok(Self::Shr),
-            TokenKind::Shl => Ok(Self::Shl),
-            TokenKind::Eq => Ok(Self::Eq),
-            TokenKind::NegEq => Ok(Self::NegEq),
-            TokenKind::Assign => Ok(Self::Assign),
-
-            _ => Err(ParserError::UnexpectedToken),
-        }
-    }
-}
 
 #[derive(Debug, PartialEq)]
 pub enum TypeKind {
@@ -80,18 +50,8 @@ pub trait Expression: core::fmt::Debug {
 
 pub type HeapExpr = Box<dyn Expression>;
 
-struct Binary {
-    kind: OperatorKind,
-    next_expr: HeapExpr,
-}
-
 struct Named {
     name: Symbol,
-    next_expr: HeapExpr,
-}
-
-struct Type {
-    kind: TypeKind,
     next_expr: HeapExpr,
 }
 
@@ -110,6 +70,7 @@ pub fn parse_expr(parser: &mut Parser) -> Result<HeapExpr, ParserError> {
         .or_else(|_| into_boxed_expr(Grouping::try_from(parser.borrow_mut())))
         .or_else(|_| into_boxed_expr(Transform::try_from(parser.borrow_mut())))
         .or_else(|_| into_boxed_expr(Value::try_from(parser.borrow_mut())))
+        .or_else(|_| into_boxed_expr(Binary::try_from(parser.borrow_mut())))
 }
 
 /*

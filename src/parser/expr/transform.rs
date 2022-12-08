@@ -1,5 +1,4 @@
 use intaglio::Symbol;
-
 use crate::{
     lexer::{Token, TokenKind},
     parser::expr::{Expression, HeapExpr, Parser, ParserError, TypeKind},
