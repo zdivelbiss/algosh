@@ -181,7 +181,7 @@ impl Token {
     }
 
     #[inline]
-    pub const fn take_kind(self) -> TokenKind {
+    pub fn take_kind(self) -> TokenKind {
         self.kind
     }
 }

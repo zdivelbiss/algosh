@@ -8,8 +8,8 @@
     option_result_contains
 )]
 
-// pub mod linearizer;
 pub mod lexer;
+pub mod linearizer;
 pub mod parser;
 pub mod strings;
 

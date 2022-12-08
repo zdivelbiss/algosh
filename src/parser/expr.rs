@@ -1,5 +1,5 @@
 use crate::{
-    lexer::{TokenKind, },
+    lexer::TokenKind,
     parser::{Parser, ParserError},
     token,
 };
@@ -91,13 +91,15 @@ pub struct Argument {
     ty: TypeKind,
 }
 
+trait Expression1 {}
+
+struct Transform {
+    parameters: Vec<(Symbol, TypeKind)>,
+    expr: Box<dyn Expression1>
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Expression {
-    Evaluation {
-        kind: EvalKind,
-        next_expr: Box<Self>,
-    },
-
     Transform {
         parameters: Vec<(Symbol, TypeKind)>,
         next_expr: Box<Self>,
@@ -181,7 +183,7 @@ impl TryFrom<&mut Parser<'_>> for Expression {
                             })
                         }
                     })?;
-                
+
                     parser.expect(&token!( TokenKind::Assign))?;
                     parameters.push((
                         name,
@@ -216,15 +218,6 @@ impl TryFrom<&mut Parser<'_>> for Expression {
                     next_expr: Box::new(Self::try_from(parser)?),
                 })
             }
-
-            kind if let Ok(eval_kind) = EvalKind::try_from(kind) => {
-                parser.advance();
-
-                Ok(Self::Evaluation {
-                    kind: eval_kind,
-                    next_expr: Box::new(Self::try_from(parser)?),
-                })
-            },
 
             kind if let Ok(operator_kind) = OperatorKind::try_from(kind) => {
                 parser.advance();
