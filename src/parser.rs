@@ -30,6 +30,7 @@ pub enum Primitive {
 
 #[derive(Debug, PartialEq)]
 pub enum PrimitiveType {
+    // TODO add `Char` type
     Int,
     Bool,
     String,
@@ -46,14 +47,58 @@ pub enum Expression {
 
     // TODO: Figure out how to implement tuples and arrays in the type system.
     Tuple(Vec<(Symbol, Option<PrimitiveType>)>),
-    Array(Vec<SpannedExpr>),
+    Array(Vec<Spanned<Expression>>),
+
+    TypeDef(Symbol, HeapExpr),
+    VarDef(Symbol, HeapExpr),
 }
 
-pub type SpannedExpr = (Expression, logos::Span);
-pub type HeapExpr = Box<SpannedExpr>;
+pub type Spanned<T> = (T, logos::Span);
+pub type HeapExpr = Box<Spanned<Expression>>;
 pub type ExprError = Simple<TokenKind, logos::Span>;
 
-pub fn parse() -> impl Parser<TokenKind, Vec<HeapExpr>, Error = ExprError> + Clone {
+pub fn parse(lexer: crate::lexer::TokenIterator) -> Option<Vec<HeapExpr>> {
+    let (exprs, errs) = parse_aggregate().parse_recovery(lexer);
+
+    println!("{errs:?}");
+
+    exprs
+}
+
+fn parse_aggregate() -> impl Parser<TokenKind, Vec<HeapExpr>, Error = ExprError> + Clone {
+    parse_vardef()
+        .or(parse_typedef())
+        .map(Box::new)
+        .separated_by(just(TokenKind::Terminator))
+
+    // .map(Box::new)
+    // // separate into individual statements.
+    //
+}
+
+fn parse_vardef() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError> + Clone {
+    just(TokenKind::VarDef)
+        .ignore_then(parse_tld())
+        .map(|(name, expr)| (Expression::VarDef(name.0, Box::new(expr)), name.1))
+}
+
+fn parse_typedef() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError> + Clone {
+    just(TokenKind::TypeDef)
+        .ignore_then(parse_tld())
+        .map(|(name, expr)| (Expression::TypeDef(name.0, Box::new(expr)), name.1))
+}
+
+fn parse_tld(
+) -> impl Parser<TokenKind, (Spanned<Symbol>, Spanned<Expression>), Error = ExprError> + Clone {
+    parse_symbol()
+        .map_with_span(|expr, span| (expr, span))
+        .clone()
+        .then_ignore(just(TokenKind::Assign))
+        .then(parse_expr())
+        .then_ignore(just(TokenKind::Terminator))
+}
+
+fn parse_expr() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError> + Clone {
     recursive(|expr| {
         let atom = parse_array()
             .or(parse_tuple())
@@ -137,18 +182,16 @@ pub fn parse() -> impl Parser<TokenKind, Vec<HeapExpr>, Error = ExprError> + Clo
 
         // `assign` is the last parsed operator
         let op = select! { TokenKind::Assign => Operator::Assign };
-        insert
+        let assign = insert
             .clone()
             .then(op.then(insert).repeated())
             .foldl(|a, (op, b)| {
                 let span = a.1.start..b.1.end;
                 (Expression::Binary(Box::new(a), op, Box::new(b)), span)
-            })
+            });
+
+        assign
     })
-    // map the final parser to a boxed expression.
-    .map(Box::new)
-    // separate into individual statements.
-    .separated_by(just(TokenKind::Terminator))
 }
 
 fn parse_value() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {

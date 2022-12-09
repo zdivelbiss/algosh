@@ -4,11 +4,6 @@ use logos::{Lexer, Logos};
 
 #[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
-    #[regex(r"[\s]+", logos::skip)]
-    #[regex(r"//.*\n", logos::skip)]
-    #[regex(r"/\*[\S\s]*\*/", logos::skip)]
-    Discard,
-
     #[regex(r"#\[.]?\]", |lex| lex.slice().parse())]
     Preprocess(String),
 
@@ -16,8 +11,6 @@ pub enum TokenKind {
     Terminator,
     #[token(",")]
     Separator,
-    #[token("?")]
-    Ternary,
 
     #[token("(")]
     GroupOpen,
@@ -31,11 +24,6 @@ pub enum TokenKind {
     ArrayOpen,
     #[token("]")]
     ArrayClose,
-
-    #[token("if")]
-    StartCondition,
-    #[token("else")]
-    NextCondition,
 
     #[token(":+")]
     AddAssign,
@@ -84,17 +72,19 @@ pub enum TokenKind {
     #[token("=")]
     Eq,
 
+    #[token("|")]
+    Or,
+    #[token("&")]
+    And,
     #[token("||")]
     OrCircuit,
     #[token("&&")]
     AndCircuit,
-    #[token("&")]
-    And,
 
-    #[token("loop")]
-    Loop,
-    #[token("exit")]
-    Exit,
+    #[token("var")]
+    VarDef,
+    #[token("ty")]
+    TypeDef,
 
     #[token("Int")]
     TypeInt,
@@ -110,14 +100,20 @@ pub enum TokenKind {
     Boolean(bool),
     #[regex(r#""[^"\\]*(?:\\.[^"\\]*)*""#, trim_and_cache)]
     String(Symbol),
+    #[regex(r"[A-Za-z_][\w]*", trim_and_cache)]
+    Symbol(Symbol),
 
     #[regex(r#"\$"[\w]+""#, trim_and_cache)]
     EnvVar(Symbol),
     #[regex(r"\$[\w]+", trim_and_cache)]
     EnvCmd(Symbol),
 
-    #[regex(r"[A-Za-z_][\w]*", trim_and_cache)]
-    Symbol(Symbol),
+    #[token("exit")]
+    Exit,
+
+    #[regex(r"[\s]+", logos::skip)]
+    #[regex(r"//[\S\t\v\r ]*\n?", logos::skip)]
+    Discard,
 
     #[error]
     Unknown,
@@ -190,7 +186,23 @@ impl Iterator for TokenIterator<'_> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.lexer.next()
+        loop {
+            match self.lexer.next() {
+                Some((kind, span)) if let TokenKind::Unknown = kind => {
+                    println!("Error processing token: {:?}", self.src().get(span));
+                    continue;
+                }
+
+                Some(token) => {
+                    println!("{:?} {:?}", &token.0, self.src().get(token.1.clone()));
+                    return Some(token);
+                }
+
+                token => 
+                    return token
+            }
+            
+        }
     }
 }
 
