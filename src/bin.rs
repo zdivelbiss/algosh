@@ -16,7 +16,7 @@ static EXPR_SYNTAX_LEXER_TEST: &str = r#"
     "#;
 static EXPR_PARSER_TEST: &str = "(1 + (3 - 1)) + (8 / 5)";
 static EXPR_PARSER_TEST_ARRAY: &str = "lazy add_one: |a: Int| 1 + 1;";
-static CHUMSKY_TEST: &str = "|a: Int| 123 + 234 + 345";
+static CHUMSKY_TEST: &str = "123 + 234 + 345";
 
 fn main() {
     let lexer = crash::lexer::lexer(CHUMSKY_TEST);

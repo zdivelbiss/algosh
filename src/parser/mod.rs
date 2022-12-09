@@ -181,9 +181,15 @@ fn parse_aggregate() -> impl Parser<TokenKind, HeapExpr, Error = ExprError> + Cl
 
         let ident = select! { TokenKind::Identifier(name) => name }.labelled("identifier");
 
-        let binary = expr
+        let atom = value
+            .or(ident.map(|i| Box::new(Expression::Identifier(i))))
+            .or(expr
+                .clone()
+                .delimited_by(just(TokenKind::GroupOpen), just(TokenKind::GroupClose)));
+
+        let binary = atom
             .clone()
-            .then(op.then(expr.clone()).repeated())
+            .then(op.then(expr).repeated())
             .foldl(|a, (op, b)| Box::new(Expression::Binary(a, op, b)));
 
         let params = ident
@@ -199,16 +205,10 @@ fn parse_aggregate() -> impl Parser<TokenKind, HeapExpr, Error = ExprError> + Cl
 
         let func = params
             .clone()
-            .then(expr.clone())
+            .then(atom)
             .map(|(params, expr)| Box::new(Expression::Func(params, expr)));
 
-        value
-            .or(ident.map(|i| Box::new(Expression::Identifier(i))))
-            .or(binary)
-            .or(func)
-            .or(expr
-                .clone()
-                .delimited_by(just(TokenKind::GroupOpen), just(TokenKind::GroupClose)))
+        binary.or(func)
 
         // .map_with_span(|expr, span| (expr, span))
         // .recover_with(nested_delimiters(
