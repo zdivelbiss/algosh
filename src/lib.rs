@@ -8,6 +8,23 @@
     option_result_contains,
     type_alias_impl_trait
 )]
+#![deny(
+    clippy::semicolon_if_nothing_returned,
+    clippy::debug_assert_with_mut_call,
+    clippy::float_arithmetic
+)]
+#![warn(clippy::cargo, clippy::pedantic, clippy::undocumented_unsafe_blocks)]
+#![allow(
+    clippy::cast_lossless,
+    clippy::enum_glob_use,
+    clippy::inline_always,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::unreadable_literal,
+    clippy::wildcard_imports,
+    clippy::wildcard_dependencies,
+    dead_code
+)]
 
 pub mod lexer;
 pub mod linearizer;
@@ -37,7 +54,7 @@ fn throw_error(msg: &str, src: Option<&str>, token: Option<lexer::TokenSource>) 
         println!(" {: >row_num_digits$} | {: >pad$}", "", "^".repeat(token.src.chars().count()), pad = (token.col + row_num_digits + 3));
     } else {
         println!("Failed to load the error line.");
-        println!("This is a compiler error.")
+        println!("This is a compiler error.");
     }
 
     std::process::exit(-1)
