@@ -39,21 +39,22 @@ pub enum Expression {
     Value(Value),
     Identifier(Symbol),
     Binary(HeapExpr, Operator, HeapExpr),
+
+    // TODO: Figure out how to implement tuples and arrays in the type system.
     Tuple(Vec<(Symbol, Option<TypeKind>)>),
+    Array(Vec<SpannedExpr>),
 }
 
-pub type HeapExpr = Box<(Expression, logos::Span)>;
+pub type SpannedExpr = (Expression, logos::Span);
+pub type HeapExpr = Box<SpannedExpr>;
 pub type ExprError = Simple<TokenKind, logos::Span>;
 
-pub fn parse() -> impl Parser<TokenKind, Vec<HeapExpr>, Error = ExprError> {
-    parse_aggregate().repeated()
-}
-
-fn parse_aggregate() -> impl Parser<TokenKind, HeapExpr, Error = ExprError> + Clone {
+pub fn parse() -> impl Parser<TokenKind, Vec<HeapExpr>, Error = ExprError> + Clone {
     recursive(|expr| {
-        let atom = parse_value()
-            .or(parse_identifier())
+        let atom = parse_array()
             .or(parse_tuple())
+            .or(parse_value())
+            .or(parse_identifier())
             .map_with_span(|expr, span| (expr, span))
             .or(expr
                 .clone()
@@ -84,7 +85,8 @@ fn parse_aggregate() -> impl Parser<TokenKind, HeapExpr, Error = ExprError> + Cl
                     (TokenKind::ArrayOpen, TokenKind::ArrayClose),
                 ],
                 |span| (Expression::Error, span),
-            ));
+            ))
+            .labelled("atom");
 
         /* parse binary expressions */
         let op = select! { TokenKind::Shr => Operator::Shr, TokenKind::Shl => Operator::Shl };
@@ -141,6 +143,8 @@ fn parse_aggregate() -> impl Parser<TokenKind, HeapExpr, Error = ExprError> + Cl
     })
     // map the final parser to a boxed expression.
     .map(Box::new)
+    // separate into individual statements.
+    .separated_by(just(TokenKind::Terminator))
 }
 
 fn parse_value() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
@@ -162,11 +166,13 @@ fn parse_type() -> impl Parser<TokenKind, TypeKind, Error = ExprError> + Clone {
 }
 
 fn parse_symbol() -> impl Parser<TokenKind, Symbol, Error = ExprError> + Clone {
-    select! { TokenKind::Symbol(name) => name }.labelled("identifier")
+    select! { TokenKind::Symbol(name) => name }.labelled("symbol")
 }
 
 fn parse_identifier() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
-    parse_symbol().map(Expression::Identifier)
+    parse_symbol()
+        .map(Expression::Identifier)
+        .labelled("identifier")
 }
 
 fn parse_tuple() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
@@ -176,4 +182,15 @@ fn parse_tuple() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clon
         .repeated()
         .delimited_by(just(TokenKind::TupleOpen), just(TokenKind::TupleClose))
         .map(Expression::Tuple)
+        .labelled("tuple")
+}
+
+fn parse_array() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
+    parse_value()
+        .clone()
+        .map_with_span(|expr, span| (expr, span))
+        .separated_by(just(TokenKind::Separator))
+        .delimited_by(just(TokenKind::ArrayOpen), just(TokenKind::ArrayClose))
+        .map(Expression::Array)
+        .labelled("array")
 }

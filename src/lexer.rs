@@ -11,7 +11,7 @@ pub enum TokenKind {
     Preprocess(String),
 
     #[token(";")]
-    StatementEnd,
+    Terminator,
     #[token(",")]
     Separator,
     #[token("?")]

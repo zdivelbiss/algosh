@@ -7,10 +7,10 @@ static PARSER_TEST: &str = r#"if randomvar = 5 { $echo: ["blah", "blah", "blah"]
 static ARRAY_TEST: &str = r#"["blah0", !127, "blah2"]"#;
 static ENV_VARIABLE_TEST: &str = r#"$"TEST": !128"#;
 static EXPR_SYNTAX_LEXER_TEST: &str = r#"
-    const set: [1, 2, 3, 4, 6, 8, !10];
+    set: [1, 2, 3, 4, 6, 8, !10];
 
-    lazy add_one: { a: Int } => a + 1;
-    lazy add_one_set: { set: [Int] } => add_one;
+    add_one: { a: Int  => a + 1;
+    add_one_set: { set: Int } => add_one;
     "#;
 static EXPR_PARSER_TEST: &str = "(1 + (3 - 1)) + (8 / 5)";
 static EXPR_PARSER_TEST_ARRAY: &str = "lazy add_one: |a: Int| 1 + 1;";
@@ -19,8 +19,9 @@ static CHUMSKY_TEST: &str = "{set: Int} => 1 + 2 - 8";
 fn main() {
     use chumsky::Parser;
 
-    let lexer = algo::lexer::lexer(CHUMSKY_TEST);
-    let parser = algo::parser::parse().parse_recovery(lexer);
+    let lexer = algo::lexer::lexer(EXPR_SYNTAX_LEXER_TEST);
+    let (exprs, _errs) = algo::parser::parse().parse_recovery(lexer);
 
-    println!("{parser:#?}");
+    // println!("{errs:?}");
+    println!("{exprs:#?}");
 }
