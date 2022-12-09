@@ -1,15 +1,15 @@
 [package]
-name = "crash"
+name = "Algosh"
 version = "0.1.0"
 edition = "2021"
 
 
 [lib]
-name = "crash"
+name = "algo"
 path = "src/lib.rs"
 
 [[bin]]
-name = "crash-cli"
+name = "algo-sh"
 path = "src/bin.rs"
 
 [dependencies]

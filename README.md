@@ -1,2 +1,2 @@
-# crash
-Crab Shell
+# Algosh
+The Algo Shell
