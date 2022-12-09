@@ -21,7 +21,7 @@ fn row_src(row: usize, src: &str) -> Option<&str> {
 
 #[allow(dead_code)]
 fn throw_error(msg: &str, src: Option<&str>, token: Option<lexer::TokenSource>) -> ! {
-    println!("error: {}", msg);
+    println!("error: {msg}");
     if let Some(token) = token
         && let Some(src) = src
         && let Some(row_src) = row_src(token.row, src)
@@ -32,7 +32,7 @@ fn throw_error(msg: &str, src: Option<&str>, token: Option<lexer::TokenSource>) 
         // print padding line
         println!(" {: >row_num_digits$} |", "");
         // print row string from source
-        println!(" {: >row_num_digits$} | {}", row_num, row_src);
+        println!(" {row_num: >row_num_digits$} | {row_src}");
         // print token underline
         println!(" {: >row_num_digits$} | {: >pad$}", "", "^".repeat(token.src.chars().count()), pad = (token.col + row_num_digits + 3));
     } else {

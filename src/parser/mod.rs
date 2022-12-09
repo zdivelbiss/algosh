@@ -1,117 +1,11 @@
+use crate::lexer::TokenKind;
 use chumsky::{
     prelude::Simple, primitive::just, recovery::nested_delimiters, recursive::recursive, select,
     Parser,
 };
 use intaglio::Symbol;
 
-use crate::lexer::{Token, TokenKind};
-
-// #[derive(Debug)]
-// pub enum ParserError {
-//     UnexpectedToken,
-
-//     NoMoreTokens,
-
-//     Expected {
-//         expected: Token,
-//         found: Option<Token>,
-//     },
-
-//     FoundMsg {
-//         found: Option<Token>,
-//         msg: String,
-//     },
-
-//     Msg(String),
-
-//     ReplaceThisError,
-// }
-
-// pub struct Parser<'a> {
-//     tokens: crate::lexer::LexerIterator<'a>,
-// }
-
-// impl<'a> Parser<'a> {
-//     pub fn new(tokens: crate::lexer::LexerIterator<'a>) -> Self {
-//         Self { tokens }
-//     }
-
-//     pub(crate) fn peek(&mut self) -> Option<&Token> {
-//         self.tokens.peek()
-//     }
-
-//     pub(crate) fn expect(&mut self, expect: &Token) -> Result<(), ParserError> {
-//         match self.peek() {
-//             Some(kind) if kind.eq(expect) => {
-//                 self.advance();
-
-//                 Ok(())
-//             }
-
-//             kind => Err(ParserError::Expected {
-//                 expected: expect.clone(),
-//                 found: kind.cloned(),
-//             }),
-//         }
-//     }
-
-//     pub(crate) fn expect_with<T>(
-//         &mut self,
-//         expect_fn: impl FnOnce(&Token) -> Result<T, ParserError>,
-//     ) -> Result<T, ParserError> {
-//         match self.peek() {
-//             Some(token) => {
-//                 let result = expect_fn(token);
-//                 if result.is_ok() {
-//                     self.advance();
-//                 }
-
-//                 result
-//             }
-
-//             None => Err(ParserError::ReplaceThisError),
-//         }
-//     }
-
-//     pub(crate) fn advance(&mut self) {
-//         self.tokens.next().expect("cannot discard no tokens");
-//     }
-
-//     #[allow(dead_code)]
-//     pub(crate) fn throw(&mut self, msg: &str) -> ! {
-//         let token_src = match self.tokens.next() {
-//             Some(t) => self.tokens.find_token(&t),
-//             None => None,
-//         };
-//         crate::throw_error(msg, Some(self.tokens.src()), token_src)
-//     }
-// }
-
-// impl Iterator for Parser<'_> {
-//     type Item = expr::HeapExpr;
-
-//     fn next(&mut self) -> Option<Self::Item> {
-//         if self.tokens.peek().is_some() {
-//             match expr::parse_expr(self) {
-//                 Ok(expr) => Some(expr),
-
-//                 Err(ParserError::ReplaceThisError) => {
-//                     println!("REPALCE ERROR");
-//                     None
-//                 }
-
-//                 Err(err) => {
-//                     // FIXME: make this output real errors
-//                     panic!("{:?}", err)
-//                 }
-//             }
-//         } else {
-//             None
-//         }
-//     }
-// }
-
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
     Add,
     Sub,
@@ -119,6 +13,10 @@ pub enum Operator {
     Div,
     Shr,
     Shl,
+    Eq,
+    NegEq,
+    Assign,
+    Insert,
 }
 
 #[derive(Debug, PartialEq)]
@@ -141,11 +39,12 @@ pub enum Expression {
     Value(Value),
     Identifier(Symbol),
     Binary(HeapExpr, Operator, HeapExpr),
-    Func(Vec<(Symbol, TypeKind)>, HeapExpr),
+    Tuple(Vec<(Symbol, Option<TypeKind>)>),
 }
 
-pub type HeapExpr = Box<Expression>;
 pub type Spanned<T> = (T, logos::Span);
+pub type SpannedExpr = Spanned<Expression>;
+pub type HeapExpr = Box<SpannedExpr>;
 pub type ExprError = Simple<TokenKind, logos::Span>;
 
 pub fn parse() -> impl Parser<TokenKind, Vec<HeapExpr>, Error = ExprError> {
@@ -154,89 +53,129 @@ pub fn parse() -> impl Parser<TokenKind, Vec<HeapExpr>, Error = ExprError> {
 
 fn parse_aggregate() -> impl Parser<TokenKind, HeapExpr, Error = ExprError> + Clone {
     recursive(|expr| {
-        let value = select! {
-            TokenKind::Integer(x) => Expression::Value(Value::Int(x)),
-            TokenKind::Boolean(x) => Expression::Value(Value::Bool(x)),
-            TokenKind::String(x) => Expression::Value(Value::String(x)),
-        }
-        .map(Box::new)
-        .labelled("value");
-
-        let ty = select! {
-            TokenKind::TypeInt => TypeKind::Int,
-            TokenKind::TypeBool => TypeKind::Bool,
-            TokenKind::TypeString => TypeKind::String,
-        }
-        .labelled("type");
-
-        let op = select! {
-            TokenKind::Add => Operator::Add,
-            TokenKind::Sub => Operator::Sub,
-            TokenKind::Mul => Operator::Mul,
-            TokenKind::Div => Operator::Div,
-            TokenKind::Shr => Operator::Shr,
-            TokenKind::Shl => Operator::Shl,
-        }
-        .labelled("operator");
-
-        let ident = select! { TokenKind::Identifier(name) => name }.labelled("identifier");
-
-        let atom = value
-            .or(ident.map(|i| Box::new(Expression::Identifier(i))))
+        let atom = parse_value()
+            .or(parse_identifier())
+            .or(parse_tuple())
+            .map_with_span(|expr, span| (expr, span))
             .or(expr
                 .clone()
-                .delimited_by(just(TokenKind::GroupOpen), just(TokenKind::GroupClose)));
+                .delimited_by(just(TokenKind::GroupOpen), just(TokenKind::GroupClose)))
+            .recover_with(nested_delimiters(
+                TokenKind::GroupOpen,
+                TokenKind::GroupClose,
+                [
+                    (TokenKind::ArrayOpen, TokenKind::ArrayClose),
+                    (TokenKind::TupleOpen, TokenKind::TupleClose),
+                ],
+                |span| (Expression::Error, span),
+            ))
+            .recover_with(nested_delimiters(
+                TokenKind::ArrayOpen,
+                TokenKind::ArrayClose,
+                [
+                    (TokenKind::GroupOpen, TokenKind::GroupClose),
+                    (TokenKind::TupleOpen, TokenKind::TupleClose),
+                ],
+                |span| (Expression::Error, span),
+            ))
+            .recover_with(nested_delimiters(
+                TokenKind::TupleOpen,
+                TokenKind::TupleClose,
+                [
+                    (TokenKind::GroupOpen, TokenKind::GroupClose),
+                    (TokenKind::ArrayOpen, TokenKind::ArrayClose),
+                ],
+                |span| (Expression::Error, span),
+            ));
 
-        let binary = atom
+        /* parse binary expressions */
+        let op = select! { TokenKind::Shr => Operator::Shr, TokenKind::Shl => Operator::Shl };
+        let shift = atom
             .clone()
-            .then(op.then(expr).repeated())
-            .foldl(|a, (op, b)| Box::new(Expression::Binary(a, op, b)));
+            .then(op.then(atom).repeated())
+            .foldl(|a, (op, b)| {
+                let span = a.1.start..b.1.end;
+                (Expression::Binary(Box::new(a), op, Box::new(b)), span)
+            });
 
-        let params = ident
+        let op = select! { TokenKind::Add => Operator::Add, TokenKind::Sub => Operator::Sub };
+        let sum = shift
             .clone()
-            .then_ignore(just(TokenKind::Assign))
-            .then(ty)
-            .separated_by(just(TokenKind::Separator))
-            .delimited_by(
-                just(TokenKind::ParameterBrace),
-                just(TokenKind::ParameterBrace),
-            )
-            .labelled("parameters");
+            .then(op.then(shift).repeated())
+            .foldl(|a, (op, b)| {
+                let span = a.1.start..b.1.end;
+                (Expression::Binary(Box::new(a), op, Box::new(b)), span)
+            });
 
-        let func = params
+        let op = select! { TokenKind::Mul => Operator::Mul, TokenKind::Div => Operator::Div };
+        let product = sum
             .clone()
-            .then(atom)
-            .map(|(params, expr)| Box::new(Expression::Func(params, expr)));
+            .then(op.then(sum).repeated())
+            .foldl(|a, (op, b)| {
+                let span = a.1.start..b.1.end;
+                (Expression::Binary(Box::new(a), op, Box::new(b)), span)
+            });
 
-        binary.or(func)
+        let op = select! { TokenKind::Eq => Operator::Eq, TokenKind::NegEq => Operator::NegEq };
+        let eq = product
+            .clone()
+            .then(op.then(product).repeated())
+            .foldl(|a, (op, b)| {
+                let span = a.1.start..b.1.end;
+                (Expression::Binary(Box::new(a), op, Box::new(b)), span)
+            });
 
-        // .map_with_span(|expr, span| (expr, span))
-        // .recover_with(nested_delimiters(
-        //     TokenKind::GroupOpen,
-        //     TokenKind::GroupClose,
-        //     [
-        //         (TokenKind::ArrayOpen, TokenKind::ArrayClose),
-        //         (TokenKind::TupleOpen, TokenKind::TupleClose),
-        //     ],
-        //     |span| (Box::new(Expression::Error), span),
-        // ))
-        // .recover_with(nested_delimiters(
-        //     TokenKind::ArrayOpen,
-        //     TokenKind::ArrayClose,
-        //     [
-        //         (TokenKind::GroupOpen, TokenKind::GroupClose),
-        //         (TokenKind::TupleOpen, TokenKind::TupleClose),
-        //     ],
-        //     |span| (Box::new(Expression::Error), span),
-        // ))
-        // .recover_with(nested_delimiters(
-        //     TokenKind::TupleOpen,
-        //     TokenKind::TupleClose,
-        //     [
-        //         (TokenKind::GroupOpen, TokenKind::GroupClose),
-        //         (TokenKind::ArrayOpen, TokenKind::ArrayClose),
-        //     ],
-        //     |span| (Box::new(Expression::Error), span),
-        // ))
+        let op = select! { TokenKind::Insert => Operator::Insert };
+        let insert = eq.clone().then(op.then(eq).repeated()).foldl(|a, (op, b)| {
+            let span = a.1.start..b.1.end;
+            (Expression::Binary(Box::new(a), op, Box::new(b)), span)
+        });
+
+        // `assign` is the last parsed operator
+        let op = select! { TokenKind::Assign => Operator::Assign };
+        insert
+            .clone()
+            .then(op.then(insert).repeated())
+            .foldl(|a, (op, b)| {
+                let span = a.1.start..b.1.end;
+                (Expression::Binary(Box::new(a), op, Box::new(b)), span)
+            })
     })
+    // map the final parser to a boxed expression.
+    .map(Box::new)
+}
+
+fn parse_value() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
+    select! {
+        TokenKind::Integer(x) => Expression::Value(Value::Int(x)),
+        TokenKind::Boolean(x) => Expression::Value(Value::Bool(x)),
+        TokenKind::String(x) => Expression::Value(Value::String(x)),
+    }
+    .labelled("value")
+}
+
+fn parse_type() -> impl Parser<TokenKind, TypeKind, Error = ExprError> + Clone {
+    select! {
+        TokenKind::TypeInt => TypeKind::Int,
+        TokenKind::TypeBool => TypeKind::Bool,
+        TokenKind::TypeString => TypeKind::String,
+    }
+    .labelled("type")
+}
+
+fn parse_symbol() -> impl Parser<TokenKind, Symbol, Error = ExprError> + Clone {
+    select! { TokenKind::Symbol(name) => name }.labelled("identifier")
+}
+
+fn parse_identifier() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
+    parse_symbol().map(Expression::Identifier)
+}
+
+fn parse_tuple() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
+    parse_symbol()
+        .then_ignore(just(TokenKind::Assign))
+        .then(parse_type().or_not())
+        .repeated()
+        .delimited_by(just(TokenKind::TupleOpen), just(TokenKind::TupleClose))
+        .map(Expression::Tuple)
 }

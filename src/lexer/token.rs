@@ -9,16 +9,12 @@ pub enum TokenKind {
     #[regex(r"#\[.]?\]", |lex| lex.slice().parse())]
     Preprocess(String),
 
-    #[token("|")]
-    ParameterBrace,
     #[token(";")]
     StatementEnd,
     #[token(",")]
     Separator,
     #[token("?")]
     Ternary,
-    #[token("=>")]
-    Flow,
 
     #[token("(")]
     GroupOpen,
@@ -67,6 +63,8 @@ pub enum TokenKind {
     Shl,
     #[token("^")]
     Xor,
+    #[token("=>")]
+    Insert,
 
     #[token(">=")]
     GreaterEq,
@@ -116,7 +114,7 @@ pub enum TokenKind {
     EnvCmd(Symbol),
 
     #[regex(r"[A-Za-z_][\w]*", trim_and_cache)]
-    Identifier(Symbol),
+    Symbol(Symbol),
 
     #[error]
     Unknown,

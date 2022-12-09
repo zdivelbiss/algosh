@@ -63,9 +63,9 @@ impl Iterator for LexerIterator<'_> {
 
 pub type LexerSpan = core::ops::Range<usize>;
 
-impl<'a> Into<Stream<'a, TokenKind, LexerSpan, LexerIterator<'a>>> for LexerIterator<'a> {
-    fn into(self) -> Stream<'a, TokenKind, LexerSpan, LexerIterator<'a>> {
-        Stream::from_iter(self.src().len()..(self.src().len() + 1), self)
+impl<'a> From<LexerIterator<'a>> for Stream<'a, TokenKind, LexerSpan, LexerIterator<'a>> {
+    fn from(lexer: LexerIterator<'a>) -> Self {
+        Self::from_iter(lexer.src().len()..(lexer.src().len() + 1), lexer)
     }
 }
 
