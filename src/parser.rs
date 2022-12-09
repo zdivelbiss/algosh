@@ -42,9 +42,7 @@ pub enum Expression {
     Tuple(Vec<(Symbol, Option<TypeKind>)>),
 }
 
-pub type Spanned<T> = (T, logos::Span);
-pub type SpannedExpr = Spanned<Expression>;
-pub type HeapExpr = Box<SpannedExpr>;
+pub type HeapExpr = Box<(Expression, logos::Span)>;
 pub type ExprError = Simple<TokenKind, logos::Span>;
 
 pub fn parse() -> impl Parser<TokenKind, Vec<HeapExpr>, Error = ExprError> {
