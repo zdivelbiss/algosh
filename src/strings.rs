@@ -21,5 +21,5 @@ pub fn get_intern_str(symbol: Symbol) -> String {
     cache
         .get(symbol)
         .expect("unknown symbol for symbol table")
-        .to_string()
+        .to_string() // FIXME: Don't allocate a new string here
 }
