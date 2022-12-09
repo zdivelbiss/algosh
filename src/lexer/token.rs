@@ -1,5 +1,5 @@
 use intaglio::Symbol;
-use logos::{Lexer, Logos, Span};
+use logos::{Lexer, Logos};
 
 #[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
@@ -21,9 +21,9 @@ pub enum TokenKind {
     Flow,
 
     #[token("(")]
-    GroupingOpen,
+    GroupOpen,
     #[token(")")]
-    GroupingClose,
+    GroupClose,
     #[token("{")]
     TupleOpen,
     #[token("}")]
@@ -134,71 +134,4 @@ fn trim_and_cache(lexer: &mut Lexer<TokenKind>) -> Option<Symbol> {
 
 fn parse_neg_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
     lexer.slice().replace('!', "-").as_str().parse().ok()
-}
-
-#[derive(Clone)]
-pub struct Token {
-    kind: TokenKind,
-    span: Span,
-}
-
-impl Eq for Token {}
-impl PartialEq for Token {
-    fn eq(&self, other: &Self) -> bool {
-        // Equality comparisons for tokens use only the type, not their values.
-        match (self.kind(), other.kind()) {
-            (TokenKind::Integer(_), TokenKind::Integer(_))
-            | (TokenKind::Boolean(_), TokenKind::Boolean(_))
-            | (TokenKind::String(_), TokenKind::String(_))
-            | (TokenKind::Identifier(_), TokenKind::Identifier(_))
-            | (TokenKind::EnvVar(_), TokenKind::EnvVar(_))
-            | (TokenKind::EnvCmd(_), TokenKind::EnvCmd(_)) => true,
-
-            (slf, other) => slf.eq(other),
-        }
-    }
-}
-
-impl Token {
-    #[inline]
-    pub const fn new(kind: TokenKind, span: Span) -> Self {
-        Self { kind, span }
-    }
-
-    #[inline]
-    pub const fn without_span(kind: TokenKind) -> Self {
-        Self { kind, span: 0..0 }
-    }
-
-    #[inline]
-    pub const fn kind(&self) -> &TokenKind {
-        &self.kind
-    }
-
-    #[inline]
-    pub fn span(&self) -> &Span {
-        &self.span
-    }
-
-    #[inline]
-    pub fn take_kind(self) -> TokenKind {
-        self.kind
-    }
-}
-
-impl std::fmt::Debug for Token {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.debug_tuple("Token").field(self.kind()).finish()
-    }
-}
-
-#[macro_export]
-macro_rules! token {
-    ($kind:expr) => {
-        $crate::lexer::Token::without_span($kind)
-    };
-
-    ($kind:expr, $span:expr) => {
-        $crate::lexer::Token::new($kind, $span)
-    };
 }

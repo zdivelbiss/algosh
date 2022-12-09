@@ -5,7 +5,8 @@
     anonymous_lifetime_in_impl_trait,
     try_trait_v2,
     once_cell,
-    option_result_contains
+    option_result_contains,
+    type_alias_impl_trait
 )]
 
 pub mod lexer;

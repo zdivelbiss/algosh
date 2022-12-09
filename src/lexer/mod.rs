@@ -1,7 +1,10 @@
 mod token;
 pub use token::*;
 
+use chumsky::Stream;
 use logos::Logos;
+
+pub type Token = (TokenKind, logos::Span);
 
 pub struct TokenSource<'a> {
     pub src: &'a str,
@@ -16,7 +19,7 @@ impl<'a> Iterator for LexerTokenizationIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let (kind, span) = self.0.next()?;
 
-        Some(Token::new(kind, span))
+        Some((kind, span))
     }
 }
 
@@ -34,9 +37,8 @@ impl LexerIterator<'_> {
         self.lexer.peek()
     }
 
-    pub fn find_token(&self, token: &Token) -> Option<TokenSource> {
-        let token_span = token.span();
-        let span_str = self.src.get(..token_span.end)?;
+    pub fn find_token(&self, (_, span): &Token) -> Option<TokenSource> {
+        let span_str = self.src.get(..span.end)?;
         let (row, end_col) = span_str
             .lines()
             .enumerate()
@@ -44,9 +46,9 @@ impl LexerIterator<'_> {
             .map(|(row, line_str)| (row, line_str.chars().count()))?;
 
         Some(TokenSource {
-            src: span_str.get(token.span().start..)?,
+            src: span_str.get(span.start..)?,
             row,
-            col: end_col - token_span.len(),
+            col: end_col - span.len(),
         })
     }
 }
@@ -56,6 +58,14 @@ impl Iterator for LexerIterator<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.lexer.next()
+    }
+}
+
+pub type LexerSpan = core::ops::Range<usize>;
+
+impl<'a> Into<Stream<'a, TokenKind, LexerSpan, LexerIterator<'a>>> for LexerIterator<'a> {
+    fn into(self) -> Stream<'a, TokenKind, LexerSpan, LexerIterator<'a>> {
+        Stream::from_iter(self.src().len()..(self.src().len() + 1), self)
     }
 }
 

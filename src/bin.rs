@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use chumsky::Parser;
+
 extern crate crash;
 
 static LEXER_TEST: &str = r#"if$"env_var"~=45{$"env_var":>>!856} else if true { $echo: "failure \" is possible" } else { a1d + 1ad }"#;
@@ -14,12 +16,12 @@ static EXPR_SYNTAX_LEXER_TEST: &str = r#"
     "#;
 static EXPR_PARSER_TEST: &str = "(1 + (3 - 1)) + (8 / 5)";
 static EXPR_PARSER_TEST_ARRAY: &str = "lazy add_one: |a: Int| 1 + 1;";
+static CHUMSKY_TEST: &str = "|a: Int| 123 + 234 + 345";
 
 fn main() {
-    let lexer = crash::lexer::lexer(EXPR_PARSER_TEST);
-    let parser = crash::parser::Parser::new(lexer);
+    let lexer = crash::lexer::lexer(CHUMSKY_TEST);
 
-    for a in parser {
-        println!("{:#?}", a);
-    }
+    let parser = crash::parser::parse().parse_recovery(lexer);
+
+    println!("{:#?}", parser);
 }
