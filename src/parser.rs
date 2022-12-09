@@ -20,28 +20,32 @@ pub enum Operator {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Value {
+pub enum Primitive {
     Int(isize),
     Bool(bool),
     String(Symbol),
+    Array(Vec<Self>),
+    Tuple(Vec<Self>),
 }
 
 #[derive(Debug, PartialEq)]
-pub enum TypeKind {
+pub enum PrimitiveType {
     Int,
     Bool,
     String,
+    Array(Box<Self>),
+    Tuple(Vec<Self>),
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Expression {
     Error,
-    Value(Value),
+    Primitive(Primitive),
     Identifier(Symbol),
     Binary(HeapExpr, Operator, HeapExpr),
 
     // TODO: Figure out how to implement tuples and arrays in the type system.
-    Tuple(Vec<(Symbol, Option<TypeKind>)>),
+    Tuple(Vec<(Symbol, Option<PrimitiveType>)>),
     Array(Vec<SpannedExpr>),
 }
 
@@ -149,18 +153,18 @@ pub fn parse() -> impl Parser<TokenKind, Vec<HeapExpr>, Error = ExprError> + Clo
 
 fn parse_value() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
     select! {
-        TokenKind::Integer(x) => Expression::Value(Value::Int(x)),
-        TokenKind::Boolean(x) => Expression::Value(Value::Bool(x)),
-        TokenKind::String(x) => Expression::Value(Value::String(x)),
+        TokenKind::Integer(x) => Expression::Primitive(Primitive::Int(x)),
+        TokenKind::Boolean(x) => Expression::Primitive(Primitive::Bool(x)),
+        TokenKind::String(x) => Expression::Primitive(Primitive::String(x)),
     }
     .labelled("value")
 }
 
-fn parse_type() -> impl Parser<TokenKind, TypeKind, Error = ExprError> + Clone {
+fn parse_type() -> impl Parser<TokenKind, PrimitiveType, Error = ExprError> + Clone {
     select! {
-        TokenKind::TypeInt => TypeKind::Int,
-        TokenKind::TypeBool => TypeKind::Bool,
-        TokenKind::TypeString => TypeKind::String,
+        TokenKind::TypeInt => PrimitiveType::Int,
+        TokenKind::TypeBool => PrimitiveType::Bool,
+        TokenKind::TypeString => PrimitiveType::String,
     }
     .labelled("type")
 }

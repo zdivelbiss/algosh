@@ -9,6 +9,11 @@ static ENV_VARIABLE_TEST: &str = r#"$"TEST": !128"#;
 static EXPR_SYNTAX_LEXER_TEST: &str = r#"
     set: [1, 2, 3, 4, 6, 8, !10];
 
+    // comment
+    /* 
+        multiline comment
+    */
+
     add_one: { a: Int  => a + 1;
     add_one_set: { set: Int } => add_one;
     "#;

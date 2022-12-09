@@ -5,6 +5,8 @@ use logos::{Lexer, Logos};
 #[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     #[regex(r"[\s]+", logos::skip)]
+    #[regex(r"//.*\n", logos::skip)]
+    #[regex(r"/\*[\S\s]*\*/", logos::skip)]
     Discard,
 
     #[regex(r"#\[.]?\]", |lex| lex.slice().parse())]
