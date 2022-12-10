@@ -57,35 +57,37 @@ pub type Spanned<T> = (T, logos::Span);
 pub type HeapExpr = Box<Spanned<Expression>>;
 pub type ExprError = Simple<TokenKind, logos::Span>;
 
-pub fn parse(lexer: crate::lexer::TokenIterator) -> Option<Vec<HeapExpr>> {
-    let (exprs, errs) = parse_aggregate().parse_recovery(lexer);
-
-    println!("{errs:?}");
-
-    exprs
+pub fn parse(lexer: crate::lexer::TokenIterator) -> (Option<Vec<HeapExpr>>, Vec<ExprError>) {
+    parse_aggregate().parse_recovery(lexer)
 }
 
 fn parse_aggregate() -> impl Parser<TokenKind, Vec<HeapExpr>, Error = ExprError> + Clone {
     parse_vardef()
         .or(parse_typedef())
+        .or(parse_expr())
         .map(Box::new)
-        .separated_by(just(TokenKind::Terminator))
-
-    // .map(Box::new)
-    // // separate into individual statements.
-    //
+        .repeated()
+        .then_ignore(chumsky::primitive::end())
 }
 
 fn parse_vardef() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError> + Clone {
     just(TokenKind::VarDef)
         .ignore_then(parse_tld())
-        .map(|(name, expr)| (Expression::VarDef(name.0, Box::new(expr)), name.1))
+        .map(|(name, expr)| {
+            let span = name.1.start..expr.1.end;
+            (Expression::VarDef(name.0, Box::new(expr)), span)
+        })
+        .labelled("var define")
 }
 
 fn parse_typedef() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError> + Clone {
     just(TokenKind::TypeDef)
         .ignore_then(parse_tld())
-        .map(|(name, expr)| (Expression::TypeDef(name.0, Box::new(expr)), name.1))
+        .map(|(name, expr)| {
+            let span = name.1.start..expr.1.end;
+            (Expression::TypeDef(name.0, Box::new(expr)), span)
+        })
+        .labelled("type define")
 }
 
 fn parse_tld(
@@ -96,6 +98,7 @@ fn parse_tld(
         .then_ignore(just(TokenKind::Assign))
         .then(parse_expr())
         .then_ignore(just(TokenKind::Terminator))
+        .labelled("top-level declaration")
 }
 
 fn parse_expr() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError> + Clone {
@@ -192,6 +195,7 @@ fn parse_expr() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError
 
         assign
     })
+    .labelled("expression")
 }
 
 fn parse_value() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
@@ -207,7 +211,7 @@ fn parse_type() -> impl Parser<TokenKind, PrimitiveType, Error = ExprError> + Cl
     select! {
         TokenKind::TypeInt => PrimitiveType::Int,
         TokenKind::TypeBool => PrimitiveType::Bool,
-        TokenKind::TypeString => PrimitiveType::String,
+        TokenKind::TypeStr => PrimitiveType::String,
     }
     .labelled("type")
 }
@@ -226,7 +230,7 @@ fn parse_tuple() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clon
     parse_symbol()
         .then_ignore(just(TokenKind::Assign))
         .then(parse_type().or_not())
-        .repeated()
+        .separated_by(just(TokenKind::Separator))
         .delimited_by(just(TokenKind::TupleOpen), just(TokenKind::TupleClose))
         .map(Expression::Tuple)
         .labelled("tuple")

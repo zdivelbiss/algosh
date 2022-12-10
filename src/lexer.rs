@@ -90,8 +90,8 @@ pub enum TokenKind {
     TypeInt,
     #[token("Bool")]
     TypeBool,
-    #[token("String")]
-    TypeString,
+    #[token("Str")]
+    TypeStr,
 
     #[regex(r"![\d]+", parse_neg_integer)]
     #[regex(r"[\d]+", |lex| lex.slice().parse(), priority = 2)]
@@ -119,6 +119,60 @@ pub enum TokenKind {
     Unknown,
 }
 
+impl From<&TokenKind> for &str {
+    fn from(value: &TokenKind) -> Self {
+        match value {
+            TokenKind::Terminator => ";",
+            TokenKind::Separator => ",",
+            TokenKind::GroupOpen => "(",
+            TokenKind::GroupClose => ")",
+            TokenKind::TupleOpen => "{",
+            TokenKind::TupleClose => "}",
+            TokenKind::ArrayOpen => "[",
+            TokenKind::ArrayClose => "]",
+            TokenKind::AddAssign => ":+",
+            TokenKind::SubAssign => ":-",
+            TokenKind::MulAssign => ":*",
+            TokenKind::DivAssign => ":/",
+            TokenKind::ShrAssign => ":>>",
+            TokenKind::ShlAssign => ":<<",
+            TokenKind::Assign => ":",
+            TokenKind::Add => "+",
+            TokenKind::Sub => "-",
+            TokenKind::Mul => "*",
+            TokenKind::Div => "/",
+            TokenKind::Shr => ">>",
+            TokenKind::Shl => "<<",
+            TokenKind::Xor => "^",
+            TokenKind::Insert => "=>",
+            TokenKind::GreaterEq => ">=",
+            TokenKind::Greater => ">",
+            TokenKind::LessEq => "<=",
+            TokenKind::Less => "<",
+            TokenKind::NegEq => "!=",
+            TokenKind::Eq => "=",
+            TokenKind::Or => "|",
+            TokenKind::And => "&",
+            TokenKind::OrCircuit => "||",
+            TokenKind::AndCircuit => "&&",
+            TokenKind::VarDef => "var",
+            TokenKind::TypeDef => "ty",
+            TokenKind::TypeInt => "Int",
+            TokenKind::TypeBool => "Bool",
+            TokenKind::TypeStr => "Str",
+            TokenKind::Integer(_) => "integer",
+            TokenKind::Boolean(_) => "boolean",
+            TokenKind::String(_) => "string",
+            TokenKind::Symbol(_) => "symbol",
+            TokenKind::EnvVar(_) => r#"$"VAR_NAME""#,
+            TokenKind::EnvCmd(_) => "$cmd_name",
+            TokenKind::Exit => "exit",
+
+            _ => "NOPRINT",
+        }
+    }
+}
+
 fn trim_and_cache(lexer: &mut Lexer<TokenKind>) -> Symbol {
     crate::strings::intern_str(
         lexer
@@ -135,12 +189,6 @@ fn parse_neg_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
 
 pub type Token = (TokenKind, logos::Span);
 
-pub struct TokenSource<'a> {
-    pub src: &'a str,
-    pub row: usize,
-    pub col: usize,
-}
-
 struct Tokenizer<'a>(logos::SpannedIter<'a, TokenKind>);
 impl<'a> Iterator for Tokenizer<'a> {
     type Item = Token;
@@ -151,6 +199,9 @@ impl<'a> Iterator for Tokenizer<'a> {
         Some((kind, span))
     }
 }
+
+
+
 
 pub struct TokenIterator<'a> {
     src: &'a str,
@@ -165,20 +216,13 @@ impl TokenIterator<'_> {
     pub fn peek(&mut self) -> Option<&Token> {
         self.lexer.peek()
     }
+}
 
-    pub fn find_token(&self, (_, span): &Token) -> Option<TokenSource> {
-        let span_str = self.src.get(..span.end)?;
-        let (row, end_col) = span_str
-            .lines()
-            .enumerate()
-            .last()
-            .map(|(row, line_str)| (row, line_str.chars().count()))?;
 
-        Some(TokenSource {
-            src: span_str.get(span.start..)?,
-            row,
-            col: end_col - span.len(),
-        })
+impl Clone for TokenIterator<'_> {
+    fn clone(&self) -> Self {
+        let lexer = Tokenizer(TokenKind::lexer(self.src).spanned()).peekable();
+        Self { src: self.src, lexer  }
     }
 }
 
@@ -192,14 +236,8 @@ impl Iterator for TokenIterator<'_> {
                     println!("Error processing token: {:?}", self.src().get(span));
                     continue;
                 }
-
-                Some(token) => {
-                    println!("{:?} {:?}", &token.0, self.src().get(token.1.clone()));
-                    return Some(token);
-                }
-
-                token => 
-                    return token
+                
+                token => return token
             }
             
         }
