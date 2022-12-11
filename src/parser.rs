@@ -53,6 +53,33 @@ pub enum Expression {
     VarDef(Symbol, HeapExpr),
 }
 
+impl Expression {
+    fn try_reduce(&mut self) {
+        match self {
+            Self::Binary(lefthand, op, righthand) => {
+                let (((Self::Primitive(leftprim), _))) = **lefthand
+                else {};
+
+                let (((Self::Primitive(rightprim), _))) = **righthand
+                else {};
+            }
+            Self::Tuple(_) => todo!(),
+            Self::Array(_) => todo!(),
+            Self::TypeDef(_, _) => todo!(),
+            Self::VarDef(_, _) => todo!(),
+
+            _ => {}
+        }
+    }
+
+    fn into_primitive(&self) -> Option<Primitive> {
+        match self {
+            Expression::Primitive(prim) => Some(prim.clone()),
+            _ => None,
+        }
+    }
+}
+
 pub type Spanned<T> = (T, logos::Span);
 pub type HeapExpr = Box<Spanned<Expression>>;
 pub type ExprError = Simple<TokenKind, logos::Span>;
