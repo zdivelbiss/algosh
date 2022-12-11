@@ -1,6 +1,6 @@
 use chumsky::Stream;
 use intaglio::Symbol;
-use logos::{Lexer, Logos};
+use logos::{Lexer, Logos, Span};
 
 #[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
@@ -76,7 +76,7 @@ pub enum TokenKind {
     BitOr,
     #[token("&")]
     BitAnd,
-    
+
     #[token("or")]
     Or,
     #[token("and")]
@@ -188,75 +188,40 @@ fn parse_neg_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
     lexer.slice().replace('!', "-").as_str().parse().ok()
 }
 
-pub type Token = (TokenKind, logos::Span);
+pub type Token = (TokenKind, Span);
 
-struct Tokenizer<'a>(logos::SpannedIter<'a, TokenKind>);
-impl<'a> Iterator for Tokenizer<'a> {
+#[derive(Debug)]
+pub struct Tokens {
+    tokens: Box<[Token]>,
+    index: usize,
+}
+
+impl Iterator for Tokens {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (kind, span) = self.0.next()?;
-
-        Some((kind, span))
-    }
-}
-
-
-
-
-pub struct TokenIterator<'a> {
-    src: &'a str,
-    lexer: std::iter::Peekable<Tokenizer<'a>>,
-}
-
-impl TokenIterator<'_> {
-    pub fn src(&self) -> &str {
-        self.src
-    }
-
-    pub fn peek(&mut self) -> Option<&Token> {
-        self.lexer.peek()
-    }
-}
-
-
-impl Clone for TokenIterator<'_> {
-    fn clone(&self) -> Self {
-        let lexer = Tokenizer(TokenKind::lexer(self.src).spanned()).peekable();
-        Self { src: self.src, lexer  }
-    }
-}
-
-impl Iterator for TokenIterator<'_> {
-    type Item = Token;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.lexer.next() {
-                Some((kind, span)) if let TokenKind::Unknown = kind => {
-                    println!("Error processing token: {:?}", self.src().get(span));
-                    continue;
-                }
-                
-                token => return token
-            }
-            
+        let token = self.tokens.get(self.index).cloned();
+        if token.is_some() {
+            self.index += 1;
         }
+
+        token
     }
 }
 
-pub type Span = core::ops::Range<usize>;
-
-impl<'a> From<TokenIterator<'a>> for Stream<'a, TokenKind, Span, TokenIterator<'a>> {
-    fn from(lexer: TokenIterator<'a>) -> Self {
-        #[allow(clippy::range_plus_one)]
-        Self::from_iter(lexer.src().len()..(lexer.src().len() + 1), lexer)
+impl From<Tokens> for chumsky::Stream<'_, TokenKind, Span, Tokens> {
+    fn from(tokens: Tokens) -> Self {
+        let tokens_len = tokens.tokens.len();
+        chumsky::Stream::from_iter(tokens_len..(tokens_len + 1), tokens)
     }
 }
 
-pub fn lexer(input: &str) -> TokenIterator {
-    TokenIterator {
-        src: input,
-        lexer: Tokenizer(TokenKind::lexer(input).spanned()).peekable(),
+pub fn lex(input: &str) -> Tokens {
+    let mut tokens = TokenKind::lexer(input).spanned().collect::<Vec<Token>>();
+    tokens.shrink_to_fit();
+
+    Tokens {
+        tokens: tokens.into_boxed_slice(),
+        index: 0,
     }
 }

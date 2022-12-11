@@ -1,4 +1,4 @@
-use crate::lexer::TokenKind;
+use crate::lexer::{Token, TokenKind};
 use chumsky::{
     prelude::Simple, primitive::just, recovery::nested_delimiters, recursive::recursive, select,
     Parser,
@@ -60,8 +60,8 @@ pub type Spanned<T> = (T, logos::Span);
 pub type HeapExpr = Box<Spanned<Expression>>;
 pub type ExprError = Simple<TokenKind, logos::Span>;
 
-pub fn parse(lexer: crate::lexer::TokenIterator) -> (Option<Vec<HeapExpr>>, Vec<ExprError>) {
-    parse_aggregate().parse_recovery(lexer)
+pub fn parse(tokens: crate::lexer::Tokens) -> Result<Vec<HeapExpr>, Vec<ExprError>> {
+    parse_aggregate().parse(tokens)
 }
 
 fn parse_aggregate() -> impl Parser<TokenKind, Vec<HeapExpr>, Error = ExprError> + Clone {
