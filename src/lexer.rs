@@ -73,13 +73,14 @@ pub enum TokenKind {
     Eq,
 
     #[token("|")]
-    Or,
+    BitOr,
     #[token("&")]
+    BitAnd,
+    
+    #[token("or")]
+    Or,
+    #[token("and")]
     And,
-    #[token("||")]
-    OrCircuit,
-    #[token("&&")]
-    AndCircuit,
 
     #[token("var")]
     VarDef,
@@ -151,10 +152,10 @@ impl From<&TokenKind> for &str {
             TokenKind::Less => "<",
             TokenKind::NegEq => "!=",
             TokenKind::Eq => "=",
-            TokenKind::Or => "|",
-            TokenKind::And => "&",
-            TokenKind::OrCircuit => "||",
-            TokenKind::AndCircuit => "&&",
+            TokenKind::BitOr => "|",
+            TokenKind::BitAnd => "&",
+            TokenKind::Or => "||",
+            TokenKind::And => "&&",
             TokenKind::VarDef => "var",
             TokenKind::TypeDef => "ty",
             TokenKind::TypeInt => "Int",

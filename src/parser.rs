@@ -6,13 +6,17 @@ use chumsky::{
 use intaglio::Symbol;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Operator {
+pub enum Arithmetic {
     Add,
     Sub,
     Mul,
     Div,
     Shr,
     Shl,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Operator {
     Eq,
     NegEq,
     Assign,
@@ -24,8 +28,6 @@ pub enum Primitive {
     Int(isize),
     Bool(bool),
     String(Symbol),
-    Array(Vec<Self>),
-    Tuple(Vec<Self>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -34,20 +36,21 @@ pub enum PrimitiveType {
     Int,
     Bool,
     String,
-    Array(Box<Self>),
-    Tuple(Vec<Self>),
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Expression {
     Error,
+
     Primitive(Primitive),
     Identifier(Symbol),
-    Binary(HeapExpr, Operator, HeapExpr),
 
     // TODO: Figure out how to implement tuples and arrays in the type system.
     Tuple(Vec<(Symbol, Option<PrimitiveType>)>),
     Array(Vec<Spanned<Expression>>),
+
+    Arithmetic(HeapExpr, Arithmetic, HeapExpr),
+    Binary(HeapExpr, Operator, HeapExpr),
 
     TypeDef(Symbol, HeapExpr),
     VarDef(Symbol, HeapExpr),
@@ -57,16 +60,22 @@ impl Expression {
     fn try_reduce(&mut self) {
         match self {
             Self::Binary(lefthand, op, righthand) => {
-                let (((Self::Primitive(leftprim), _))) = **lefthand
-                else {};
+                let (Self::Primitive(leftprim), leftspan) = &mut **lefthand else { return; };
+                let (rightexpr, rightspan) = &mut **righthand;
 
-                let (((Self::Primitive(rightprim), _))) = **righthand
-                else {};
+                // Try to reduce the primitives, or reduce the righthand and try again.
+                for _ in 0..2 {
+                    if let Expression::Primitive(rightprim) = rightexpr {
+                        match (leftprim, rightprim) {
+                            (Primitive::Int(int), Primitive::Int(int))  => todo!(),
+                            Primitive::Bool(_) => todo!(),
+                            Primitive::String(_) => todo!(),
+                        }
+                    } else {
+                        rightexpr.try_reduce();
+                    }
+                }
             }
-            Self::Tuple(_) => todo!(),
-            Self::Array(_) => todo!(),
-            Self::TypeDef(_, _) => todo!(),
-            Self::VarDef(_, _) => todo!(),
 
             _ => {}
         }
