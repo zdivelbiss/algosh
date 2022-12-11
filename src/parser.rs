@@ -6,19 +6,19 @@ use chumsky::{
 use intaglio::Symbol;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Arithmetic {
+pub enum Operator {
     Add,
     Sub,
     Mul,
     Div,
     Shr,
     Shl,
+    Eq,
+    NegEq,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Operator {
-    Eq,
-    NegEq,
+pub enum Control {
     Assign,
     Insert,
 }
@@ -49,44 +49,11 @@ pub enum Expression {
     Tuple(Vec<(Symbol, Option<PrimitiveType>)>),
     Array(Vec<Spanned<Expression>>),
 
-    Arithmetic(HeapExpr, Arithmetic, HeapExpr),
     Binary(HeapExpr, Operator, HeapExpr),
+    Control(HeapExpr, Control, HeapExpr),
 
     TypeDef(Symbol, HeapExpr),
     VarDef(Symbol, HeapExpr),
-}
-
-impl Expression {
-    fn try_reduce(&mut self) {
-        match self {
-            Self::Binary(lefthand, op, righthand) => {
-                let (Self::Primitive(leftprim), leftspan) = &mut **lefthand else { return; };
-                let (rightexpr, rightspan) = &mut **righthand;
-
-                // Try to reduce the primitives, or reduce the righthand and try again.
-                for _ in 0..2 {
-                    if let Expression::Primitive(rightprim) = rightexpr {
-                        match (leftprim, rightprim) {
-                            (Primitive::Int(int), Primitive::Int(int))  => todo!(),
-                            Primitive::Bool(_) => todo!(),
-                            Primitive::String(_) => todo!(),
-                        }
-                    } else {
-                        rightexpr.try_reduce();
-                    }
-                }
-            }
-
-            _ => {}
-        }
-    }
-
-    fn into_primitive(&self) -> Option<Primitive> {
-        match self {
-            Expression::Primitive(prim) => Some(prim.clone()),
-            _ => None,
-        }
-    }
 }
 
 pub type Spanned<T> = (T, logos::Span);
@@ -213,20 +180,23 @@ fn parse_expr() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError
                 (Expression::Binary(Box::new(a), op, Box::new(b)), span)
             });
 
-        let op = select! { TokenKind::Insert => Operator::Insert };
-        let insert = eq.clone().then(op.then(eq).repeated()).foldl(|a, (op, b)| {
-            let span = a.1.start..b.1.end;
-            (Expression::Binary(Box::new(a), op, Box::new(b)), span)
-        });
+        let op = select! { TokenKind::Insert => Control::Insert };
+        let insert = eq
+            .clone()
+            .then(op.then(eq).repeated())
+            .foldl(|a, (ctrl, b)| {
+                let span = a.1.start..b.1.end;
+                (Expression::Control(Box::new(a), ctrl, Box::new(b)), span)
+            });
 
         // `assign` is the last parsed operator
-        let op = select! { TokenKind::Assign => Operator::Assign };
+        let op = select! { TokenKind::Assign => Control::Assign };
         let assign = insert
             .clone()
             .then(op.then(insert).repeated())
-            .foldl(|a, (op, b)| {
+            .foldl(|a, (ctrl, b)| {
                 let span = a.1.start..b.1.end;
-                (Expression::Binary(Box::new(a), op, Box::new(b)), span)
+                (Expression::Control(Box::new(a), ctrl, Box::new(b)), span)
             });
 
         assign
