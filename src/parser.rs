@@ -1,7 +1,7 @@
-use crate::{lexer::TokenKind,  Operator, Primitive, PrimitiveType};
+use crate::{lexer::TokenKind, Operator, Primitive, PrimitiveType};
 use chumsky::{
     prelude::Simple, primitive::just, recovery::nested_delimiters, recursive::recursive, select,
-    Parser,
+    BoxedParser, Parser,
 };
 use intaglio::Symbol;
 
@@ -26,17 +26,20 @@ pub type Spanned<T> = (T, logos::Span);
 pub type HeapExpr = Box<Spanned<Expression>>;
 pub type ExprError = Simple<TokenKind, logos::Span>;
 
+type AlgoParser<'a, T> = BoxedParser<'a, TokenKind, T, Simple<TokenKind, logos::Span>>;
+
 pub fn parse(tokens: crate::lexer::Tokens) -> Result<Vec<HeapExpr>, Vec<ExprError>> {
     parse_aggregate().parse(tokens)
 }
 
-fn parse_aggregate() -> impl Parser<TokenKind, Vec<HeapExpr>, Error = ExprError> + Clone {
+fn parse_aggregate<'a>() -> BoxedParser<'a, TokenKind, Vec<HeapExpr>, ExprError> {
     parse_vardef()
         .or(parse_typedef())
         .or(parse_expr())
         .map(Box::new)
         .repeated()
         .then_ignore(chumsky::primitive::end())
+        .boxed()
 }
 
 fn parse_vardef() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError> + Clone {
@@ -59,17 +62,18 @@ fn parse_typedef() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprEr
         .labelled("type define")
 }
 
-fn parse_tld(
-) -> impl Parser<TokenKind, (Spanned<Symbol>, Spanned<Expression>), Error = ExprError> + Clone {
+fn parse_tld<'a>() -> BoxedParser<'a, TokenKind, (Spanned<Symbol>, Spanned<Expression>), ExprError>
+{
     parse_symbol()
         .map_with_span(|expr, span| (expr, span))
         .then_ignore(just(TokenKind::Assign))
         .then(parse_expr())
         .then_ignore(just(TokenKind::Terminator))
         .labelled("top-level declaration")
+        .boxed()
 }
 
-fn parse_expr() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError> + Clone {
+fn parse_expr<'a>() -> BoxedParser<'a, TokenKind, Spanned<Expression>, ExprError> {
     recursive(|expr| {
         let atom = parse_array()
             .or(parse_tuple())
@@ -106,12 +110,13 @@ fn parse_expr() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError
                 ],
                 |span| (Expression::Error, span),
             ))
-            .labelled("atom");
+            .labelled("atom")
+            .boxed();
 
-        fn parse_op(
-            op_parser: impl Parser<TokenKind, Operator, Error = ExprError> + Clone,
-            base_parser: impl Parser<TokenKind, Spanned<Expression>, Error = ExprError> + Clone,
-        ) -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError> + Clone {
+        fn parse_op<'a>(
+            op_parser: impl 'a + Parser<TokenKind, Operator, Error = ExprError> + Clone,
+            base_parser: AlgoParser<'a, Spanned<Expression>>,
+        ) -> AlgoParser<'a, Spanned<Expression>> {
             base_parser
                 .clone()
                 .then(op_parser.then(base_parser).repeated())
@@ -119,6 +124,7 @@ fn parse_expr() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError
                     let span = a.1.start..b.1.end;
                     (Expression::Binary(Box::new(a), op, Box::new(b)), span)
                 })
+                .boxed()
         }
 
         let assign = parse_op(select! { TokenKind::Assign => Operator::Assign }, atom);
@@ -176,6 +182,7 @@ fn parse_expr() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError
         parse_op(select! { TokenKind::Or => Operator::Or}, logical_xor)
     })
     .labelled("expression")
+    .boxed()
 }
 
 fn parse_value() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
@@ -206,7 +213,7 @@ fn parse_identifier() -> impl Parser<TokenKind, Expression, Error = ExprError> +
         .labelled("identifier")
 }
 
-fn parse_tuple() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
+fn parse_tuple<'a>() -> BoxedParser<'a, TokenKind, Expression, ExprError> {
     parse_symbol()
         .then_ignore(just(TokenKind::Assign))
         .then(parse_type().or_not())
@@ -214,13 +221,15 @@ fn parse_tuple() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clon
         .delimited_by(just(TokenKind::TupleOpen), just(TokenKind::TupleClose))
         .map(Expression::Tuple)
         .labelled("tuple")
+        .boxed()
 }
 
-fn parse_array() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
+fn parse_array<'a>() -> BoxedParser<'a, TokenKind, Expression, ExprError> {
     parse_value()
         .map_with_span(|expr, span| (expr, span))
         .separated_by(just(TokenKind::Separator))
         .delimited_by(just(TokenKind::ArrayOpen), just(TokenKind::ArrayClose))
         .map(Expression::Array)
         .labelled("array")
+        .boxed()
 }

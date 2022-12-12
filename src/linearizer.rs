@@ -27,8 +27,8 @@ fn extract_nodes(nodes: &mut Vec<LinearNode>, expr: &HeapExpr) {
     match &expr.0 {
         Expression::Binary(leftexpr, op, rightexpr) => {
             extract_nodes(nodes, &leftexpr);
-            nodes.push(LinearNode::Operator(op.clone()));
             extract_nodes(nodes, &rightexpr);
+            nodes.push(LinearNode::Operator(op.clone()));
         }
 
         Expression::Primitive(primitive) => nodes.push(LinearNode::Primitive(primitive.clone())),
