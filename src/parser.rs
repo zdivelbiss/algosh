@@ -1,4 +1,4 @@
-use crate::{lexer::TokenKind, Condition, Control, Operator, Primitive, PrimitiveType};
+use crate::{lexer::TokenKind,  Operator, Primitive, PrimitiveType};
 use chumsky::{
     prelude::Simple, primitive::just, recovery::nested_delimiters, recursive::recursive, select,
     Parser,
@@ -16,9 +16,7 @@ pub enum Expression {
     Tuple(Vec<(Symbol, Option<PrimitiveType>)>),
     Array(Vec<Spanned<Expression>>),
 
-    Arithmetic(HeapExpr, Operator, HeapExpr),
-    Conditional(HeapExpr, Condition, HeapExpr),
-    Control(HeapExpr, Control, HeapExpr),
+    Binary(HeapExpr, Operator, HeapExpr),
 
     TypeDef(Symbol, HeapExpr),
     VarDef(Symbol, HeapExpr),
@@ -65,7 +63,7 @@ fn parse_tld(
 ) -> impl Parser<TokenKind, (Spanned<Symbol>, Spanned<Expression>), Error = ExprError> + Clone {
     parse_symbol()
         .map_with_span(|expr, span| (expr, span))
-        .then_ignore(just(TokenKind::Control(Control::Assign)))
+        .then_ignore(just(TokenKind::Assign))
         .then(parse_expr())
         .then_ignore(just(TokenKind::Terminator))
         .labelled("top-level declaration")
@@ -110,33 +108,72 @@ fn parse_expr() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError
             ))
             .labelled("atom");
 
-        /* parse binary expressions */
-        let op = select! { TokenKind::Control(control) => control };
-        let control = atom
-            .clone()
-            .then(op.then(atom).repeated())
-            .foldl(|a, (op, b)| {
-                let span = a.1.start..b.1.end;
-                (Expression::Control(Box::new(a), op, Box::new(b)), span)
-            });
+        fn parse_op(
+            op_parser: impl Parser<TokenKind, Operator, Error = ExprError> + Clone,
+            base_parser: impl Parser<TokenKind, Spanned<Expression>, Error = ExprError> + Clone,
+        ) -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError> + Clone {
+            base_parser
+                .clone()
+                .then(op_parser.then(base_parser).repeated())
+                .foldl(|a, (op, b)| {
+                    let span = a.1.start..b.1.end;
+                    (Expression::Binary(Box::new(a), op, Box::new(b)), span)
+                })
+        }
 
-        let op = select! { TokenKind::Condition(condition) => condition };
-        let conditional = control
-            .clone()
-            .then(op.then(control).repeated())
-            .foldl(|a, (op, b)| {
-                let span = a.1.start..b.1.end;
-                (Expression::Conditional(Box::new(a), op, Box::new(b)), span)
-            });
-
-        let op = select! { TokenKind::Operator(operator) => operator };
-        conditional
-            .clone()
-            .then(op.then(conditional).repeated())
-            .foldl(|a, (op, b)| {
-                let span = a.1.start..b.1.end;
-                (Expression::Arithmetic(Box::new(a), op, Box::new(b)), span)
-            })
+        let assign = parse_op(select! { TokenKind::Assign => Operator::Assign }, atom);
+        let flow = parse_op(select! { TokenKind::Flow => Operator::Flow }, assign);
+        let condition = parse_op(
+            select! {
+                TokenKind::Eq => Operator::Eq,
+                TokenKind::NotEq => Operator::NotEq,
+                TokenKind::Greater => Operator::Greater,
+                TokenKind::GreaterEq => Operator::GreaterEq,
+                TokenKind::Less => Operator::Less,
+                TokenKind::LessEq => Operator::LessEq,
+                TokenKind::Or => Operator::Or,
+                TokenKind::Xor => Operator::Xor,
+                TokenKind::And => Operator::And,
+            },
+            flow,
+        );
+        let exponent = parse_op(select! { TokenKind::Exp => Operator::Exp }, condition);
+        let mul_div_rem = parse_op(
+            select! { TokenKind::Mul => Operator::Mul,
+            TokenKind::Div => Operator::Div,
+            TokenKind::Rem => Operator::Rem },
+            exponent,
+        );
+        let add_sub = parse_op(
+            select! { TokenKind::Add => Operator::Add, TokenKind::Sub => Operator::Sub},
+            mul_div_rem,
+        );
+        let bitshift = parse_op(
+            select! { TokenKind::Shr => Operator::Shr, TokenKind::Shl => Operator::Shl},
+            add_sub,
+        );
+        let bitand = parse_op(select! { TokenKind::BitAnd => Operator::BitAnd }, bitshift);
+        let bitxor = parse_op(select! { TokenKind::BitXor => Operator::BitXor}, bitand);
+        let bitor = parse_op(select! { TokenKind::BitOr => Operator::BitOr }, bitxor);
+        let comparison = parse_op(
+            select! {
+                TokenKind::Eq => Operator::Eq,
+                TokenKind::NotEq => Operator::NotEq,
+                TokenKind::Greater => Operator::Greater,
+                TokenKind::GreaterEq => Operator::GreaterEq,
+                TokenKind::Less => Operator::Less,
+                TokenKind::LessEq => Operator::LessEq,
+            },
+            bitor,
+        );
+        let logical_and = parse_op(
+            select! {
+                TokenKind::And => Operator::And
+            },
+            comparison,
+        );
+        let logical_xor = parse_op(select! { TokenKind::Xor => Operator::Xor}, logical_and);
+        parse_op(select! { TokenKind::Or => Operator::Or}, logical_xor)
     })
     .labelled("expression")
 }
@@ -171,7 +208,7 @@ fn parse_identifier() -> impl Parser<TokenKind, Expression, Error = ExprError> +
 
 fn parse_tuple() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
     parse_symbol()
-        .then_ignore(just(TokenKind::Control(Control::Assign)))
+        .then_ignore(just(TokenKind::Assign))
         .then(parse_type().or_not())
         .separated_by(just(TokenKind::Separator))
         .delimited_by(just(TokenKind::TupleOpen), just(TokenKind::TupleClose))

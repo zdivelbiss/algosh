@@ -1,11 +1,9 @@
 use intaglio::Symbol;
 use logos::{Lexer, Logos, Span};
 
-use crate::{Condition, Control, Operator};
-
 #[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
-    #[regex(r"#\[.]?\]", |lex| lex.slice().parse())]
+    #[regex(r"#\[.+\]", |lex| lex.slice().parse())]
     Preprocess(String),
 
     #[token(";")]
@@ -38,14 +36,50 @@ pub enum TokenKind {
     #[token("Str")]
     TypeStr,
 
-    #[regex(r"(:|=>)", |lex| lex.slice().parse())]
-    Control(Control),
-
-    #[regex(r"([\^\-+*/|&]|>>|<<)", |lex| lex.slice().parse())]
-    Operator(Operator),
-
-    #[regex(r"([=><]|!=|or|and|>=|<=|)", |lex| lex.slice().parse())]
-    Condition(Condition),
+    #[token("+")]
+    Add,
+    #[token("-")]
+    Sub,
+    #[token("*")]
+    Mul,
+    #[token("/")]
+    Div,
+    #[token("**")]
+    Exp,
+    #[token("%")]
+    Rem,
+    #[token(">>")]
+    Shr,
+    #[token("<<")]
+    Shl,
+    #[token("^")]
+    BitXor,
+    #[token("|")]
+    BitOr,
+    #[token("&")]
+    BitAnd,
+    #[token("=")]
+    Eq,
+    #[token("!=")]
+    NotEq,
+    #[token(">")]
+    Greater,
+    #[token(">=")]
+    GreaterEq,
+    #[token("<")]
+    Less,
+    #[token("<=")]
+    LessEq,
+    #[token("or")]
+    Or,
+    #[token("xor")]
+    Xor,
+    #[token("and")]
+    And,
+    #[token(":")]
+    Assign,
+    #[token("=>")]
+    Flow,
 
     #[regex(r"![\d]+", lex_neg_integer)]
     #[regex(r"[\d]+", |lex| lex.slice().parse(), priority = 2)]

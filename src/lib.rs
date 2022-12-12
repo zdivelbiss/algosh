@@ -48,108 +48,33 @@ pub enum PrimitiveType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Operator {
+    //TODO Not,
+    Exp,
+
     Add,
     Sub,
     Mul,
     Div,
+    Rem,
     Shr,
     Shl,
-    Xor,
+
+    BitXor,
     BitAnd,
     BitOr,
 
     Eq,
-    NegEq,
+    NotEq,
 
     Greater,
     GreaterEq,
     Less,
     LessEq,
-}
 
-impl From<&'_ str> for Operator {
-    fn from(value: &'_ str) -> Self {
-        match value {
-            "+" => Self::Add,
-            "-" => Self::Sub,
-            "*" => Self::Mul,
-            "/" => Self::Div,
-            ">>" => Self::Shr,
-            "<<" => Self::Shl,
-            "^" => Self::Xor,
-            "&" => Self::BitAnd,
-            "|" => Self::BitOr,
-
-            _ => unimplemented!(),
-        }
-    }
-}
-
-impl std::str::FromStr for Operator {
-    type Err = <Self as TryFrom<&'static str>>::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::try_from(s)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Condition {
-    Eq,
-    NegEq,
     Or,
+    Xor,
     And,
-    Greater,
-    GreaterEq,
-    Less,
-    LessEq,
-}
 
-impl From<&'_ str> for Condition {
-    fn from(value: &'_ str) -> Self {
-        match value {
-            "=" => Self::Eq,
-            "!=" => Self::NegEq,
-            ">" => Self::Greater,
-            ">=" => Self::GreaterEq,
-            "<" => Self::Less,
-            "<=" => Self::LessEq,
-            "or" => Self::Or,
-            "and" => Self::And,
-
-            _ => unimplemented!(),
-        }
-    }
-}
-
-impl std::str::FromStr for Condition {
-    type Err = <Self as TryFrom<&'static str>>::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::try_from(s)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Control {
     Assign,
-    Insert,
-}
-impl From<&'_ str> for Control {
-    fn from(value: &'_ str) -> Self {
-        match value {
-            ":" => Self::Assign,
-            "=>" => Self::Insert,
-
-            _ => unimplemented!(),
-        }
-    }
-}
-
-impl std::str::FromStr for Control {
-    type Err = <Self as TryFrom<&'static str>>::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::try_from(s)
-    }
+    Flow,
 }

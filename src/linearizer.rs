@@ -1,6 +1,6 @@
 use crate::{
     parser::{Expression, HeapExpr},
-    Control, Operator, Primitive,
+    Operator, Primitive,
 };
 use intaglio::Symbol;
 
@@ -8,7 +8,6 @@ use intaglio::Symbol;
 pub enum LinearNode {
     Primitive(Primitive),
     Operator(Operator),
-    Control(Control),
 
     Var(Symbol, Vec<Self>),
     Type(Symbol, Vec<Self>),
@@ -26,7 +25,7 @@ pub fn linearize(exprs: &[HeapExpr]) -> Vec<LinearNode> {
 
 fn extract_nodes(nodes: &mut Vec<LinearNode>, expr: &HeapExpr) {
     match &expr.0 {
-        Expression::Arithmetic(leftexpr, op, rightexpr) => {
+        Expression::Binary(leftexpr, op, rightexpr) => {
             extract_nodes(nodes, &leftexpr);
             nodes.push(LinearNode::Operator(op.clone()));
             extract_nodes(nodes, &rightexpr);
