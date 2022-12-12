@@ -1,6 +1,7 @@
-use chumsky::Stream;
 use intaglio::Symbol;
 use logos::{Lexer, Logos, Span};
+
+use crate::{Condition, Control, Operator};
 
 #[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
@@ -25,63 +26,6 @@ pub enum TokenKind {
     #[token("]")]
     ArrayClose,
 
-    #[token(":+")]
-    AddAssign,
-    #[token(":-")]
-    SubAssign,
-    #[token(":*")]
-    MulAssign,
-    #[token(":/")]
-    DivAssign,
-    #[token(":>>")]
-    ShrAssign,
-    #[token(":<<")]
-    ShlAssign,
-    #[token(":")]
-    Assign,
-
-    #[token("+")]
-    Add,
-    #[token("-")]
-    Sub,
-    #[token("*")]
-    Mul,
-    #[token("/")]
-    Div,
-    #[token(">>")]
-    Shr,
-    #[token("<<")]
-    Shl,
-    #[token("^")]
-    Xor,
-    #[token("=>")]
-    Insert,
-
-    #[token(">=")]
-    GreaterEq,
-    #[token(">")]
-    Greater,
-
-    #[token("<=")]
-    LessEq,
-    #[token("<")]
-    Less,
-
-    #[token("!=")]
-    NegEq,
-    #[token("=")]
-    Eq,
-
-    #[token("|")]
-    BitOr,
-    #[token("&")]
-    BitAnd,
-
-    #[token("or")]
-    Or,
-    #[token("and")]
-    And,
-
     #[token("var")]
     VarDef,
     #[token("ty")]
@@ -94,7 +38,16 @@ pub enum TokenKind {
     #[token("Str")]
     TypeStr,
 
-    #[regex(r"![\d]+", parse_neg_integer)]
+    #[regex(r"(:|=>)", |lex| lex.slice().parse())]
+    Control(Control),
+
+    #[regex(r"([\^\-+*/|&]|>>|<<)", |lex| lex.slice().parse())]
+    Operator(Operator),
+
+    #[regex(r"([=><]|!=|or|and|>=|<=|)", |lex| lex.slice().parse())]
+    Condition(Condition),
+
+    #[regex(r"![\d]+", lex_neg_integer)]
     #[regex(r"[\d]+", |lex| lex.slice().parse(), priority = 2)]
     Integer(isize),
     #[regex(r"true|false", |lex| lex.slice().parse())]
@@ -112,12 +65,10 @@ pub enum TokenKind {
     #[token("exit")]
     Exit,
 
+    #[error]
     #[regex(r"[\s]+", logos::skip)]
     #[regex(r"//[\S\t\v\r ]*\n?", logos::skip)]
-    Discard,
-
-    #[error]
-    Unknown,
+    Error,
 }
 
 impl From<&TokenKind> for &str {
@@ -131,31 +82,6 @@ impl From<&TokenKind> for &str {
             TokenKind::TupleClose => "}",
             TokenKind::ArrayOpen => "[",
             TokenKind::ArrayClose => "]",
-            TokenKind::AddAssign => ":+",
-            TokenKind::SubAssign => ":-",
-            TokenKind::MulAssign => ":*",
-            TokenKind::DivAssign => ":/",
-            TokenKind::ShrAssign => ":>>",
-            TokenKind::ShlAssign => ":<<",
-            TokenKind::Assign => ":",
-            TokenKind::Add => "+",
-            TokenKind::Sub => "-",
-            TokenKind::Mul => "*",
-            TokenKind::Div => "/",
-            TokenKind::Shr => ">>",
-            TokenKind::Shl => "<<",
-            TokenKind::Xor => "^",
-            TokenKind::Insert => "=>",
-            TokenKind::GreaterEq => ">=",
-            TokenKind::Greater => ">",
-            TokenKind::LessEq => "<=",
-            TokenKind::Less => "<",
-            TokenKind::NegEq => "!=",
-            TokenKind::Eq => "=",
-            TokenKind::BitOr => "|",
-            TokenKind::BitAnd => "&",
-            TokenKind::Or => "||",
-            TokenKind::And => "&&",
             TokenKind::VarDef => "var",
             TokenKind::TypeDef => "ty",
             TokenKind::TypeInt => "Int",
@@ -184,7 +110,7 @@ fn trim_and_cache(lexer: &mut Lexer<TokenKind>) -> Symbol {
     )
 }
 
-fn parse_neg_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
+fn lex_neg_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
     lexer.slice().replace('!', "-").as_str().parse().ok()
 }
 
@@ -212,6 +138,7 @@ impl Iterator for Tokens {
 impl From<Tokens> for chumsky::Stream<'_, TokenKind, Span, Tokens> {
     fn from(tokens: Tokens) -> Self {
         let tokens_len = tokens.tokens.len();
+        #[allow(clippy::range_plus_one)]
         chumsky::Stream::from_iter(tokens_len..(tokens_len + 1), tokens)
     }
 }
