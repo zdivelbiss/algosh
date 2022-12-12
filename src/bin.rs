@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+
 extern crate algo;
 
 static EXPR_SYNTAX_LEXER_TEST: &str = r#"
@@ -12,12 +13,13 @@ static EXPR_SYNTAX_LEXER_TEST: &str = r#"
     var add_one: { a: Int  => a + 1;
     var add_one_set: { set: Int, add_one_fn: Int  => set => add_one_fn;
     "#;
-static EXPR_PARSER_TEST: &str = "(1 + (3 - 1)) + (8 / 5";
+static EXPR_PARSER_TEST: &str = "(1 + (3 - 1)) + 8";
 
 fn main() {
     match algo::parser::parse(algo::lexer::lex(EXPR_PARSER_TEST)) {
         Ok(exprs) => {
-            println!("{:?}", exprs);
+            let linear_nodes = algo::linearizer::linearize(exprs.as_slice());
+            println!("{linear_nodes:?}");
         }
 
         Err(errs) => {
