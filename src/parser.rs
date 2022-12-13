@@ -22,11 +22,10 @@ pub enum Expression {
     VarDef(Symbol, HeapExpr),
 }
 
-pub type Spanned<T> = (T, logos::Span);
+type Spanned<T> = (T, logos::Span);
+type ExprError = Simple<TokenKind, logos::Span>;
+type AlgoParser<'a, T> = BoxedParser<'a, TokenKind, T, ExprError>;
 pub type HeapExpr = Box<Spanned<Expression>>;
-pub type ExprError = Simple<TokenKind, logos::Span>;
-
-type AlgoParser<'a, T> = BoxedParser<'a, TokenKind, T, Simple<TokenKind, logos::Span>>;
 
 pub fn parse(tokens: crate::lexer::Tokens) -> Result<Vec<HeapExpr>, Vec<ExprError>> {
     parse_aggregate().parse(tokens)

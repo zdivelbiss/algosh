@@ -26,8 +26,8 @@ pub fn linearize(exprs: &[HeapExpr]) -> Vec<LinearNode> {
 fn extract_nodes(nodes: &mut Vec<LinearNode>, expr: &HeapExpr) {
     match &expr.0 {
         Expression::Binary(leftexpr, op, rightexpr) => {
-            extract_nodes(nodes, &leftexpr);
-            extract_nodes(nodes, &rightexpr);
+            extract_nodes(nodes, leftexpr);
+            extract_nodes(nodes, rightexpr);
             nodes.push(LinearNode::Operator(op.clone()));
         }
 
