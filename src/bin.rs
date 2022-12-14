@@ -2,25 +2,7 @@
 
 extern crate algo;
 
-static EXPR_SYNTAX_LEXER_TEST: &str = r#"
-    var set: [1, 2, 3, 4, 6, 8, !10];
-
-    // comment
-
-    // ty AddOneFn: { a: Int } => Int;
-
-    foo:
-        ~ { a: Int };
-        ~ { a: Int, b: Int };
-        ~ { a: Int u32, b: Int, c: Int };
-
-    add_one: { a: Int } => a + 1;
-    add_one_set: { set: Int, add_one_fn: Int } => set => add_one_fn;
-    "#;
-static EXPR_PARSER_TEST: &str = "{ a: 1, b: 2, c: 3, d: 8 } => (a + (b - c)) + d";
-
 fn main() {
-    println!("{:?}", parse_input(EXPR_PARSER_TEST));
 }
 
 fn parse_input(input: &str) -> Vec<algo::ssa::Instruction> {
