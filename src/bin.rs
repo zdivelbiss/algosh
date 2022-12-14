@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use std::time::Instant;
 
 extern crate algo;
 
@@ -10,16 +11,27 @@ static EXPR_SYNTAX_LEXER_TEST: &str = r#"
 
     // ty AddOneFn: { a: Int } => Int;
 
-    var add_one: { a: Int  => a + 1;
-    var add_one_set: { set: Int, add_one_fn: Int  => set => add_one_fn;
+    foo:
+        ~ { a: Int };
+        ~ { a: Int, b: Int };
+        ~ { a: Int u32, b: Int, c: Int };
+
+    add_one: { a: Int } => a + 1;
+    add_one_set: { set: Int, add_one_fn: Int } => set => add_one_fn;
     "#;
 static EXPR_PARSER_TEST: &str = "(1 + (3 - 1)) + 8";
 
 fn main() {
+    let start = Instant::now();
+
     match algo::parser::parse(algo::lexer::lex(EXPR_PARSER_TEST)) {
         Ok(exprs) => {
-            let linear_nodes = algo::linearizer::linearize(exprs.as_slice());
-            println!("{linear_nodes:?}");
+            let mut nodes = algo::linearizer::linearize(exprs.as_slice());
+            algo::optimizer::optimize(&mut nodes);
+            let end = Instant::now();
+
+            println!("Compile time: {:#?}s", (start - end).as_secs_f64());
+            println!("{nodes:?}");
         }
 
         Err(errs) => {

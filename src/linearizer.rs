@@ -6,7 +6,7 @@ use intaglio::Symbol;
 
 #[derive(Debug, Clone)]
 pub enum LinearNode {
-    Primitive(Primitive),
+    Int(isize),
     Operator(Operator),
 
     Var(Symbol, Vec<Self>),
@@ -31,7 +31,7 @@ fn extract_nodes(nodes: &mut Vec<LinearNode>, expr: &HeapExpr) {
             nodes.push(LinearNode::Operator(op.clone()));
         }
 
-        Expression::Primitive(primitive) => nodes.push(LinearNode::Primitive(primitive.clone())),
+        Expression::Primitive(Primitive::Int(int)) => nodes.push(LinearNode::Int(*int)),
 
         unhandled => panic!("unimplemented: {:?}", unhandled),
     }

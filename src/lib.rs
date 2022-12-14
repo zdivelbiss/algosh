@@ -28,8 +28,10 @@
 
 pub mod lexer;
 pub mod linearizer;
+pub mod optimizer;
 pub mod parser;
 pub mod strings;
+pub mod ssa;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Primitive {
@@ -46,7 +48,7 @@ pub enum PrimitiveType {
     String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
     //TODO Not,
     Exp,
