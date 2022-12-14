@@ -47,28 +47,37 @@ fn bind_expr(
     expr: &HeapExpr,
     nodes: &mut Vec<Instruction>,
     scopes: &mut Vec<Scope>,
-) -> Result<Binding, Error> {
+) -> Result<Option<Binding>, Error> {
     match &expr.0 {
         Expression::Binary(lhs, op, rhs) => {
-            let lhs_binding = bind_expr(&lhs, nodes, scopes)?;
-            let rhs_binding = bind_expr(&rhs, nodes, scopes)?;
+            let lhs_binding = bind_expr(&lhs, nodes, scopes)?.unwrap();
+            let rhs_binding = bind_expr(&rhs, nodes, scopes)?.unwrap();
 
             match op {
-                Operator::Add => Ok(bind_push(nodes, Instruction::Add(lhs_binding, rhs_binding))),
-                Operator::Sub => Ok(bind_push(nodes, Instruction::Sub(lhs_binding, rhs_binding))),
+                Operator::Add => Ok(Some(bind_push(
+                    nodes,
+                    Instruction::Add(lhs_binding, rhs_binding),
+                ))),
+                Operator::Sub => Ok(Some(bind_push(
+                    nodes,
+                    Instruction::Sub(lhs_binding, rhs_binding),
+                ))),
 
                 _ => unimplemented!(),
             }
         }
 
-        Expression::Primitive(primitive) => Ok(bind_push(nodes, Instruction::Bind(*primitive))),
-        Expression::Identifier(symbol) => find_var_binding(symbol, scopes).ok_or_else(|| {
-            Error::undeclared_var(
+        Expression::Primitive(primitive) => {
+            Ok(Some(bind_push(nodes, Instruction::Bind(*primitive))))
+        }
+        Expression::Identifier(symbol) => match find_var_binding(symbol, scopes) {
+            Some(binding) => Ok(Some(binding)),
+            None => Err(Error::undeclared_var(
                 expr.1.clone(),
                 crate::strings::get_intern_str(*symbol),
                 Some("ssa_identifier"),
-            )
-        }),
+            )),
+        },
 
         Expression::Tuple(components) => {
             let mut binding = None;
@@ -79,7 +88,17 @@ fn bind_expr(
                 current_scope.insert(*name, binding.unwrap());
             }
 
-            Ok(binding.unwrap())
+            Ok(binding)
+        }
+
+        Expression::Flow { from: expr, to: next } => {
+            scopes.push(Scope::new());
+            bind_expr(expr, nodes, scopes)?;
+            if let Some(next) = next {
+                bind_expr(next, nodes, scopes)?;
+            }
+
+            Ok(None)
         }
 
         _ => unimplemented!(),

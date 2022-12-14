@@ -100,7 +100,9 @@ impl Error {
                             .with_color(Color::Default),
                     );
 
-                if !expected.is_empty() {
+                if expected.len() == 1 {
+                    report = report.with_note(format!("expected '{}'", expected[0].to_string()))
+                } else if expected.len() > 1 {
                     report = report.with_note(format!(
                         "expected one of {}",
                         expected
