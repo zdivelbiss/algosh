@@ -1,7 +1,9 @@
-use crate::{lexer::TokenKind, Operator, Primitive, PrimitiveType};
+use crate::{lexer::TokenKind, Error, Operator, Primitive, PrimitiveType, TupleComponent};
 use chumsky::{
-    prelude::Simple, primitive::just, recovery::nested_delimiters, recursive::recursive, select,
-    BoxedParser, Parser,
+    primitive::{choice, just},
+    recovery::nested_delimiters,
+    recursive::recursive,
+    select, BoxedParser, Parser,
 };
 use intaglio::Symbol;
 
@@ -13,7 +15,7 @@ pub enum Expression {
     Identifier(Symbol),
 
     // TODO: Figure out how to implement tuples and arrays in the type system.
-    Tuple(Vec<(Symbol, Option<PrimitiveType>)>),
+    Tuple(Vec<(Symbol, TupleComponent)>),
     Array(Vec<Spanned<Expression>>),
 
     Binary(HeapExpr, Operator, HeapExpr),
@@ -22,26 +24,23 @@ pub enum Expression {
     VarDef(Symbol, HeapExpr),
 }
 
-type Spanned<T> = (T, logos::Span);
-type ExprError = Simple<TokenKind, logos::Span>;
-type AlgoParser<'a, T> = BoxedParser<'a, TokenKind, T, ExprError>;
+type Spanned<T> = (T, crate::Span);
+type AlgoParser<'a, T> = BoxedParser<'a, TokenKind, T, Error>;
 pub type HeapExpr = Box<Spanned<Expression>>;
 
-pub fn parse(tokens: crate::lexer::Tokens) -> Result<Vec<HeapExpr>, Vec<ExprError>> {
+pub fn parse(tokens: crate::lexer::Tokens) -> Result<Vec<HeapExpr>, Vec<Error>> {
     parse_aggregate().parse(tokens)
 }
 
-fn parse_aggregate<'a>() -> BoxedParser<'a, TokenKind, Vec<HeapExpr>, ExprError> {
-    parse_vardef()
-        .or(parse_typedef())
-        .or(parse_expr())
+fn parse_aggregate<'a>() -> BoxedParser<'a, TokenKind, Vec<HeapExpr>, Error> {
+    choice((parse_vardef(), parse_typedef(), parse_expr()))
         .map(Box::new)
         .repeated()
         .then_ignore(chumsky::primitive::end())
         .boxed()
 }
 
-fn parse_vardef() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError> + Clone {
+fn parse_vardef() -> impl Parser<TokenKind, Spanned<Expression>, Error = Error> + Clone {
     just(TokenKind::VarDef)
         .ignore_then(parse_tld())
         .map(|(name, expr)| {
@@ -51,7 +50,7 @@ fn parse_vardef() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprErr
         .labelled("var define")
 }
 
-fn parse_typedef() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprError> + Clone {
+fn parse_typedef() -> impl Parser<TokenKind, Spanned<Expression>, Error = Error> + Clone {
     just(TokenKind::TypeDef)
         .ignore_then(parse_tld())
         .map(|(name, expr)| {
@@ -61,8 +60,7 @@ fn parse_typedef() -> impl Parser<TokenKind, Spanned<Expression>, Error = ExprEr
         .labelled("type define")
 }
 
-fn parse_tld<'a>() -> BoxedParser<'a, TokenKind, (Spanned<Symbol>, Spanned<Expression>), ExprError>
-{
+fn parse_tld<'a>() -> BoxedParser<'a, TokenKind, (Spanned<Symbol>, Spanned<Expression>), Error> {
     parse_symbol()
         .map_with_span(|expr, span| (expr, span))
         .then_ignore(just(TokenKind::Assign))
@@ -72,48 +70,50 @@ fn parse_tld<'a>() -> BoxedParser<'a, TokenKind, (Spanned<Symbol>, Spanned<Expre
         .boxed()
 }
 
-fn parse_expr<'a>() -> BoxedParser<'a, TokenKind, Spanned<Expression>, ExprError> {
+fn parse_expr<'a>() -> BoxedParser<'a, TokenKind, Spanned<Expression>, Error> {
     recursive(|expr| {
-        let atom = parse_array()
-            .or(parse_tuple())
-            .or(parse_value())
-            .or(parse_identifier())
-            .map_with_span(|expr, span| (expr, span))
-            .or(expr
-                .clone()
-                .delimited_by(just(TokenKind::GroupOpen), just(TokenKind::GroupClose)))
-            .recover_with(nested_delimiters(
-                TokenKind::GroupOpen,
-                TokenKind::GroupClose,
-                [
-                    (TokenKind::ArrayOpen, TokenKind::ArrayClose),
-                    (TokenKind::TupleOpen, TokenKind::TupleClose),
-                ],
-                |span| (Expression::Error, span),
-            ))
-            .recover_with(nested_delimiters(
-                TokenKind::ArrayOpen,
-                TokenKind::ArrayClose,
-                [
-                    (TokenKind::GroupOpen, TokenKind::GroupClose),
-                    (TokenKind::TupleOpen, TokenKind::TupleClose),
-                ],
-                |span| (Expression::Error, span),
-            ))
-            .recover_with(nested_delimiters(
-                TokenKind::TupleOpen,
-                TokenKind::TupleClose,
-                [
-                    (TokenKind::GroupOpen, TokenKind::GroupClose),
-                    (TokenKind::ArrayOpen, TokenKind::ArrayClose),
-                ],
-                |span| (Expression::Error, span),
-            ))
-            .labelled("atom")
-            .boxed();
+        let atom = choice((
+            parse_array(),
+            parse_tuple(),
+            parse_primitive().map(Expression::Primitive),
+            parse_symbol().map(Expression::Identifier),
+        ))
+        .map_with_span(|expr, span| (expr, span))
+        .or(expr
+            .clone()
+            .delimited_by(just(TokenKind::GroupOpen), just(TokenKind::GroupClose)))
+        .recover_with(nested_delimiters(
+            TokenKind::GroupOpen,
+            TokenKind::GroupClose,
+            [
+                (TokenKind::ArrayOpen, TokenKind::ArrayClose),
+                (TokenKind::TupleOpen, TokenKind::TupleClose),
+            ],
+            |span| (Expression::Error, span),
+        ))
+        .recover_with(nested_delimiters(
+            TokenKind::ArrayOpen,
+            TokenKind::ArrayClose,
+            [
+                (TokenKind::GroupOpen, TokenKind::GroupClose),
+                (TokenKind::TupleOpen, TokenKind::TupleClose),
+            ],
+            |span| (Expression::Error, span),
+        ))
+        .recover_with(nested_delimiters(
+            TokenKind::TupleOpen,
+            TokenKind::TupleClose,
+            [
+                (TokenKind::GroupOpen, TokenKind::GroupClose),
+                (TokenKind::ArrayOpen, TokenKind::ArrayClose),
+            ],
+            |span| (Expression::Error, span),
+        ))
+        .labelled("atom")
+        .boxed();
 
         fn parse_op<'a>(
-            op_parser: impl 'a + Parser<TokenKind, Operator, Error = ExprError> + Clone,
+            op_parser: impl 'a + Parser<TokenKind, Operator, Error = Error> + Clone,
             base_parser: AlgoParser<'a, Spanned<Expression>>,
         ) -> AlgoParser<'a, Spanned<Expression>> {
             base_parser
@@ -184,16 +184,16 @@ fn parse_expr<'a>() -> BoxedParser<'a, TokenKind, Spanned<Expression>, ExprError
     .boxed()
 }
 
-fn parse_value() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
+fn parse_primitive() -> impl Parser<TokenKind, Primitive, Error = Error> + Clone {
     select! {
-        TokenKind::Integer(x) => Expression::Primitive(Primitive::Int(x)),
-        TokenKind::Boolean(x) => Expression::Primitive(Primitive::Bool(x)),
-        TokenKind::String(x) => Expression::Primitive(Primitive::String(x)),
+        TokenKind::Integer(x) => Primitive::Int(x),
+        TokenKind::Boolean(x) => Primitive::Bool(x),
+        TokenKind::String(x) => Primitive::String(x),
     }
     .labelled("value")
 }
 
-fn parse_type() -> impl Parser<TokenKind, PrimitiveType, Error = ExprError> + Clone {
+fn parse_type() -> impl Parser<TokenKind, PrimitiveType, Error = Error> + Clone {
     select! {
         TokenKind::TypeInt => PrimitiveType::Int,
         TokenKind::TypeBool => PrimitiveType::Bool,
@@ -202,20 +202,17 @@ fn parse_type() -> impl Parser<TokenKind, PrimitiveType, Error = ExprError> + Cl
     .labelled("type")
 }
 
-fn parse_symbol() -> impl Parser<TokenKind, Symbol, Error = ExprError> + Clone {
+fn parse_symbol() -> impl Parser<TokenKind, Symbol, Error = Error> + Clone {
     select! { TokenKind::Symbol(name) => name }.labelled("symbol")
 }
 
-fn parse_identifier() -> impl Parser<TokenKind, Expression, Error = ExprError> + Clone {
-    parse_symbol()
-        .map(Expression::Identifier)
-        .labelled("identifier")
-}
-
-fn parse_tuple<'a>() -> BoxedParser<'a, TokenKind, Expression, ExprError> {
+fn parse_tuple<'a>() -> BoxedParser<'a, TokenKind, Expression, Error> {
     parse_symbol()
         .then_ignore(just(TokenKind::Assign))
-        .then(parse_type().or_not())
+        .then(choice((
+            parse_type().map(TupleComponent::Typed),
+            parse_primitive().map(TupleComponent::Valued),
+        )))
         .separated_by(just(TokenKind::Separator))
         .delimited_by(just(TokenKind::TupleOpen), just(TokenKind::TupleClose))
         .map(Expression::Tuple)
@@ -223,8 +220,9 @@ fn parse_tuple<'a>() -> BoxedParser<'a, TokenKind, Expression, ExprError> {
         .boxed()
 }
 
-fn parse_array<'a>() -> BoxedParser<'a, TokenKind, Expression, ExprError> {
-    parse_value()
+fn parse_array<'a>() -> BoxedParser<'a, TokenKind, Expression, Error> {
+    parse_primitive()
+        .map(Expression::Primitive)
         .map_with_span(|expr, span| (expr, span))
         .separated_by(just(TokenKind::Separator))
         .delimited_by(just(TokenKind::ArrayOpen), just(TokenKind::ArrayClose))

@@ -1,16 +1,16 @@
-use crate::{linearizer::LinearNode, Operator};
+use crate::{ssa::Instruction, Operator};
 
-pub fn optimize(nodes: &mut Vec<LinearNode>) {
+pub fn optimize(nodes: &mut Vec<Instruction>) {
     simplify_consts(nodes);
 }
 
-fn simplify_consts(nodes: &mut Vec<LinearNode>) {
+fn simplify_consts(nodes: &mut Vec<Instruction>) {
     let mut from_end = nodes.len();
     loop {
         let index = nodes.len() - from_end;
 
         let op = match nodes.get(index) {
-            Some(LinearNode::Operator(op)) => *op,
+            Some(Instruction::Operator(op)) => *op,
             Some(_) => {
                 from_end -= 1;
                 continue;

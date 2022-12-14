@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 
-use std::time::Instant;
-
 extern crate algo;
 
 static EXPR_SYNTAX_LEXER_TEST: &str = r#"
@@ -19,87 +17,26 @@ static EXPR_SYNTAX_LEXER_TEST: &str = r#"
     add_one: { a: Int } => a + 1;
     add_one_set: { set: Int, add_one_fn: Int } => set => add_one_fn;
     "#;
-static EXPR_PARSER_TEST: &str = "(1 + (3 - 1)) + 8";
+static EXPR_PARSER_TEST: &str = "{ a: 1, b: 2, c: 3, d: 8 } (aaa + (b - c)) + d";
 
 fn main() {
-    let start = Instant::now();
+    parse_input(EXPR_PARSER_TEST);
+}
 
-    match algo::parser::parse(algo::lexer::lex(EXPR_PARSER_TEST)) {
-        Ok(exprs) => {
-            let mut nodes = algo::linearizer::linearize(exprs.as_slice());
-            algo::optimizer::optimize(&mut nodes);
-            let end = Instant::now();
-
-            println!("Compile time: {:#?}s", (start - end).as_secs_f64());
-            println!("{nodes:?}");
-        }
+fn parse_input(input: &str) -> Vec<algo::ssa::Instruction> {
+    match algo::parser::parse(algo::lexer::lex(input))
+        .and_then(|ast| algo::ssa::translate(ast.into_boxed_slice()))
+    {
+        Ok((ssa, _)) => ssa,
 
         Err(errs) => {
-            use algo::lexer::TokenKind;
             use ariadne::*;
 
             for err in errs.iter() {
-                let expected = err
-                    .expected()
-                    .filter_map(|o| o.as_ref().map(|kind| format!("'{}'", <&str>::from(kind))))
-                    .collect::<Vec<String>>()
-                    .join(" ");
-
-                match err.reason() {
-                    chumsky::error::SimpleReason::Unexpected => {
-                        let mut report = Report::build(ReportKind::Error, (), 8)
-                            .with_message("unexpected token")
-                            .with_label(
-                                Label::new(err.span().clone())
-                                    .with_message("compiler did not expect this token")
-                                    .with_color(Color::Default),
-                            );
-
-                        if !expected.is_empty() {
-                            report = report.with_help(format!(
-                                "suggested tokens: {}",
-                                expected.fg(Color::Green)
-                            ));
-                        }
-
-                        report
-                            .finish()
-                            .print(Source::from(EXPR_PARSER_TEST))
-                            .expect("compiler failed to generate error report");
-                    }
-
-                    chumsky::error::SimpleReason::Unclosed { span, delimiter } => {
-                        Report::build(ReportKind::Error, (), 8)
-                            .with_message("unclosed delimiter")
-                            .with_label(
-                                Label::new(span.clone())
-                                    .with_message("expected delimiter for this block")
-                                    .with_color(Color::Default),
-                            )
-                            .with_help(format!(
-                                "try inserting {} at the end of the {}",
-                                expected.fg(Color::Green),
-                                match delimiter {
-                                    TokenKind::TupleOpen => "tuple declaration",
-                                    TokenKind::ArrayOpen => "array declaration",
-                                    TokenKind::GroupOpen => "grouping",
-                                    _ => "code block",
-                                }
-                            ))
-                            .finish()
-                            .print(Source::from(EXPR_PARSER_TEST))
-                            .expect("compiler failed to generate error report");
-                    }
-
-                    chumsky::error::SimpleReason::Custom(_) => todo!(),
-                }
+                err.generate_report()
+                    .print(Source::from(input))
+                    .expect("failed to generate report for error");
             }
-
-            println!(
-                "{} failed to compile source due to ({}) errors",
-                "Error:".fg(Color::Red),
-                errs.len()
-            );
 
             std::process::exit(-1)
         }

@@ -70,11 +70,11 @@ pub enum TokenKind {
     Less,
     #[token("<=")]
     LessEq,
-    #[token("or")]
+    #[token("||")]
     Or,
-    #[token("xor")]
+    #[token("^^")]
     Xor,
-    #[token("and")]
+    #[token("&&")]
     And,
     #[token(":")]
     Assign,
@@ -105,9 +105,9 @@ pub enum TokenKind {
     Error,
 }
 
-impl From<&TokenKind> for &str {
-    fn from(value: &TokenKind) -> Self {
-        match value {
+impl core::fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display_str = match self {
             TokenKind::Terminator => ";",
             TokenKind::Separator => ",",
             TokenKind::GroupOpen => "(",
@@ -117,20 +117,37 @@ impl From<&TokenKind> for &str {
             TokenKind::ArrayOpen => "[",
             TokenKind::ArrayClose => "]",
             TokenKind::VarDef => "var",
-            TokenKind::TypeDef => "ty",
+            TokenKind::TypeDef => "type",
             TokenKind::TypeInt => "Int",
             TokenKind::TypeBool => "Bool",
             TokenKind::TypeStr => "Str",
-            TokenKind::Integer(_) => "integer",
-            TokenKind::Boolean(_) => "boolean",
-            TokenKind::String(_) => "string",
-            TokenKind::Symbol(_) => "symbol",
-            TokenKind::EnvVar(_) => r#"$"VAR_NAME""#,
-            TokenKind::EnvCmd(_) => "$cmd_name",
-            TokenKind::Exit => "exit",
+            TokenKind::Add => "+",
+            TokenKind::Sub => "-",
+            TokenKind::Mul => "*",
+            TokenKind::Div => "/",
+            TokenKind::Exp => "**",
+            TokenKind::Rem => "%",
+            TokenKind::Shr => ">>",
+            TokenKind::Shl => "<<",
+            TokenKind::BitXor => "^",
+            TokenKind::BitOr => "|",
+            TokenKind::BitAnd => "&",
+            TokenKind::Eq => "=",
+            TokenKind::NotEq => "!=",
+            TokenKind::Greater => ">",
+            TokenKind::GreaterEq => ">=",
+            TokenKind::Less => "<",
+            TokenKind::LessEq => "<=",
+            TokenKind::Or => "||",
+            TokenKind::Xor => "^^",
+            TokenKind::And => "&&",
+            TokenKind::Assign => ":",
+            TokenKind::Flow => "=>",
 
-            _ => "NOPRINT",
-        }
+            _ => return Err(std::fmt::Error),
+        };
+
+        f.write_str(display_str)
     }
 }
 
