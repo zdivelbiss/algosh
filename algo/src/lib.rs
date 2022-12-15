@@ -34,6 +34,7 @@ pub mod ssa;
 // pub mod optimizer;
 pub mod parser;
 pub mod strings;
+pub mod types;
 
 pub type Span = logos::Span;
 
