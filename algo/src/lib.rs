@@ -62,6 +62,19 @@ pub struct Error {
 }
 
 impl Error {
+    pub const fn unexpected(
+        span: Span,
+        expected: Vec<TokenKind>,
+        found: Option<TokenKind>,
+        label: Option<&'static str>,
+    ) -> Self {
+        Self {
+            span,
+            kind: ErrorKind::Unexpected { expected, found },
+            label,
+        }
+    }
+
     pub const fn undeclared_var(span: Span, var_name: String, label: Option<&'static str>) -> Self {
         Self {
             span,

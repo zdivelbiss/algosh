@@ -23,6 +23,10 @@ pub enum Expression {
     TypeDef(Symbol, HeapExpr),
     VarDef(Symbol, HeapExpr),
 
+    Control {
+        exprs: Vec<HeapExpr>,
+    },
+
     Flow {
         from: HeapExpr,
         to: Option<HeapExpr>,
@@ -38,7 +42,7 @@ pub fn parse(tokens: crate::lexer::Tokens) -> Result<Vec<HeapExpr>, Vec<Error>> 
 }
 
 fn parse_aggregate<'a>() -> BoxedParser<'a, TokenKind, Vec<HeapExpr>, Error> {
-    choice((parse_vardef(), parse_typedef(), parse_control_flow()))
+    choice((parse_vardef(), parse_typedef(), parse_flow()))
         .map(Box::new)
         .repeated()
         .then_ignore(end())
@@ -69,32 +73,43 @@ fn parse_tld<'a>() -> BoxedParser<'a, TokenKind, (Spanned<Symbol>, Spanned<Expre
     parse_symbol()
         .map_with_span(|expr, span| (expr, span))
         .then_ignore(just(TokenKind::Assign))
-        .then(parse_control_flow())
+        .then(parse_flow())
         .then_ignore(just(TokenKind::Terminator))
         .labelled("ast_tld")
         .boxed()
 }
 
-fn parse_control_flow<'a>() -> BoxedParser<'a, TokenKind, Spanned<Expression>, Error> {
+fn parse_flow<'a>() -> BoxedParser<'a, TokenKind, Spanned<Expression>, Error> {
     recursive(|expr| {
-        choice((
-            parse_array().map_with_span(|expr, span| (expr, span)),
-            parse_tuple().map_with_span(|expr, span| (expr, span)),
-            parse_expr(),
-        ))
-        .then(just(TokenKind::Flow).ignore_then(expr).or_not())
-        .map(|(expr, next)| {
-            let span = expr.1.clone();
-            (
-                Expression::Flow {
-                    from: Box::new(expr),
-                    to: next.map(Box::new),
-                },
-                span,
-            )
-        })
+        parse_control()
+            .then(just(TokenKind::Flow).ignore_then(expr).or_not())
+            .map(|(expr, next)| {
+                let span = expr.1.clone();
+                (
+                    Expression::Flow {
+                        from: Box::new(expr),
+                        to: next.map(Box::new),
+                    },
+                    span,
+                )
+            })
     })
     .labelled("ast_ctrl_flow")
+    .boxed()
+}
+
+fn parse_control<'a>() -> BoxedParser<'a, TokenKind, Spanned<Expression>, Error> {
+    choice((
+        parse_array().map_with_span(|expr, span| (expr, span)),
+        parse_tuple().map_with_span(|expr, span| (expr, span)),
+        parse_expr(),
+    ))
+    .map(Box::new)
+    .separated_by(just(TokenKind::Terminator))
+.map(|(exprs, span)| {
+    (Expression::Control { exprs }, span)
+})
+    .labelled("ast_control")
     .boxed()
 }
 
