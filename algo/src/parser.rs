@@ -78,14 +78,38 @@ fn parse_vardef() -> impl Parser<TokenKind, SpannedExpr, Error = Error> + Clone 
 //     recursive(|expr| choice(parsers))
 // }
 
+#[test]
+fn parse_type_test<'a>() {
+    static SIMPLE_ARRAY: &str = "[Int]";
+    static SIMPLE_ARRAY_LEN: &str = "[Int, 64]";
+    static COMPLEX_ARRAY_LEN: &str = "[[Int, 64], 56]";
+    static COMPLEX_TUPLE: &str = "{ { a: Int, Int, [UInt, 64] }, Int, Bool }";
+
+    let tokens = crate::lexer::lex(COMPLEX_TUPLE);
+    dbg!(&tokens);
+    let ast = parse_tuple_type().parse_recovery_verbose(tokens);
+    dbg!(&ast);
+}
+
 fn parse_tuple_type<'a>() -> AlgoParser<'a, Type> {
     recursive(|expr| {
-        parse_symbol()
+        let named_component = parse_symbol()
             .then_ignore(just(TokenKind::Assign))
-            .or_not()
-            .then(choice((parse_structural_type(), parse_array_type(), expr)))
+            .then(choice((
+                parse_structural_type(),
+                parse_array_type(),
+                expr.clone(),
+            )))
+            .map(|(s, t)| (Some(s), t))
             .separated_by(just(TokenKind::Separator))
-            .at_least(1)
+            .at_least(1);
+
+        let unnamed_component = choice((parse_structural_type(), parse_array_type(), expr.clone()))
+            .map(|t| (None, t))
+            .separated_by(just(TokenKind::Separator))
+            .at_least(1);
+
+        choice((named_component, unnamed_component))
             .delimited_by(just(TokenKind::TupleOpen), just(TokenKind::TupleClose))
             .map(Type::Tuple)
     })
@@ -127,19 +151,6 @@ fn parse_structural_type<'a>() -> impl Parser<TokenKind, Type, Error = Error> {
         TokenKind::TypeUInt => Type::UInt,
         TokenKind::TypeBool => Type::Bool,
     }
-}
-
-#[test]
-fn parse_type_test<'a>() {
-    static SIMPLE_ARRAY: &str = "[Int]";
-    static SIMPLE_ARRAY_LEN: &str = "[Int, 64]";
-    static COMPLEX_ARRAY_LEN: &str = "[[Int, 64], 56]";
-    static COMPLEX_TUPLE: &str = "{ { a: Int, Int, [UInt, 64] }, Int, Bool }";
-
-    let tokens = crate::lexer::lex(COMPLEX_TUPLE);
-    dbg!(&tokens);
-    let ast = parse_tuple_type().parse_recovery_verbose(tokens);
-    dbg!(&ast);
 }
 
 fn parse_flow<'a>() -> AlgoParser<'a, SpannedExpr> {
