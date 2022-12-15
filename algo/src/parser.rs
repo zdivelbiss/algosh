@@ -16,15 +16,17 @@ pub enum Expression {
 
     // TODO: Figure out how to implement tuples and arrays in the type system.
     Tuple(Vec<(Symbol, TupleComponent)>),
-    Array(Vec<Spanned<Expression>>),
+    Array(Vec<SpannedExpr>),
 
     Binary(HeapExpr, Operator, HeapExpr),
 
-    TypeDef(Symbol, HeapExpr),
-    VarDef(Symbol, HeapExpr),
+    VarDef {
+        name: Symbol,
+        expr: HeapExpr,
+    },
 
     Control {
-        exprs: Vec<Spanned<Expression>>,
+        exprs: Vec<SpannedExpr>,
     },
 
     Flow {
@@ -35,51 +37,54 @@ pub enum Expression {
 
 type Spanned<T> = (T, crate::Span);
 type AlgoParser<'a, T> = BoxedParser<'a, TokenKind, T, Error>;
-pub type HeapExpr = Box<Spanned<Expression>>;
+
+pub type HeapExpr = Box<SpannedExpr>;
+pub type SpannedExpr = Spanned<Expression>;
 
 pub fn parse(tokens: crate::lexer::Tokens) -> Result<Vec<HeapExpr>, Vec<Error>> {
     parse_aggregate().parse(tokens)
 }
 
 fn parse_aggregate<'a>() -> AlgoParser<'a, Vec<HeapExpr>> {
-    choice((parse_vardef(), parse_typedef(), parse_flow()))
+    choice((parse_vardef(), parse_flow()))
         .map(Box::new)
         .repeated()
         .then_ignore(end())
         .boxed()
 }
 
-fn parse_vardef() -> impl Parser<TokenKind, Spanned<Expression>, Error = Error> + Clone {
+fn parse_vardef() -> impl Parser<TokenKind, SpannedExpr, Error = Error> + Clone {
     just(TokenKind::VarDef)
-        .ignore_then(parse_tld())
-        .map(|(name, expr)| {
-            let span = name.1.start..expr.1.end;
-            (Expression::VarDef(name.0, Box::new(expr)), span)
+        .ignore_then(parse_symbol())
+        .then_ignore(just(TokenKind::Assign))
+        .then(parse_flow())
+        .then_ignore(choice((
+            just(TokenKind::Terminator).ignored(),
+            end().ignored(),
+        )))
+        .map_with_span(|(name, expr), span| {
+            (
+                Expression::VarDef {
+                    name,
+                    expr: Box::new(expr),
+                },
+                span,
+            )
         })
-        .labelled("ast_var_def")
+        .labelled("parse_vardef")
 }
 
-fn parse_typedef() -> impl Parser<TokenKind, Spanned<Expression>, Error = Error> + Clone {
-    just(TokenKind::TypeDef)
-        .ignore_then(parse_tld())
-        .map(|(name, expr)| {
-            let span = name.1.start..expr.1.end;
-            (Expression::TypeDef(name.0, Box::new(expr)), span)
-        })
-        .labelled("ast_type_def")
-}
-
-fn parse_tld<'a>() -> AlgoParser<'a, (Spanned<Symbol>, Spanned<Expression>)> {
+fn parse_tld<'a>() -> AlgoParser<'a, (Spanned<Symbol>, SpannedExpr)> {
     parse_symbol()
         .map_with_span(|expr, span| (expr, span))
         .then_ignore(just(TokenKind::Assign))
         .then(parse_flow())
         .then_ignore(just(TokenKind::Terminator))
-        .labelled("ast_tld")
+        .labelled("parse_tld")
         .boxed()
 }
 
-fn parse_flow<'a>() -> AlgoParser<'a, Spanned<Expression>> {
+fn parse_flow<'a>() -> AlgoParser<'a, SpannedExpr> {
     recursive(|expr| {
         parse_control()
             .then(just(TokenKind::Flow).ignore_then(expr).or_not())
@@ -93,22 +98,22 @@ fn parse_flow<'a>() -> AlgoParser<'a, Spanned<Expression>> {
                 )
             })
     })
-    .labelled("ast_flow")
+    .labelled("parse_flow")
     .boxed()
 }
 
-fn parse_control<'a>() -> AlgoParser<'a, Spanned<Expression>> {
+fn parse_control<'a>() -> AlgoParser<'a, SpannedExpr> {
     choice((parse_array(), parse_tuple()))
         .map_with_span(|expr, span| (expr, span))
         .or(parse_expr())
         .separated_by(just(TokenKind::Terminator))
         .at_least(1)
         .map_with_span(|exprs, span| (Expression::Control { exprs }, span))
-        .labelled("ast_control")
+        .labelled("parse_control")
         .boxed()
 }
 
-fn parse_expr<'a>() -> AlgoParser<'a, Spanned<Expression>> {
+fn parse_expr<'a>() -> AlgoParser<'a, SpannedExpr> {
     recursive(|expr| {
         let atom = choice((
             parse_primitive().map(Expression::Primitive),
@@ -143,13 +148,13 @@ fn parse_expr<'a>() -> AlgoParser<'a, Spanned<Expression>> {
             ],
             |span| (Expression::Error, span),
         ))
-        .labelled("ast_atom")
+        .labelled("parse_atom")
         .boxed();
 
         fn parse_op<'a>(
             op_parser: impl 'a + Parser<TokenKind, Operator, Error = Error> + Clone,
-            base_parser: AlgoParser<'a, Spanned<Expression>>,
-        ) -> AlgoParser<'a, Spanned<Expression>> {
+            base_parser: AlgoParser<'a, SpannedExpr>,
+        ) -> AlgoParser<'a, SpannedExpr> {
             base_parser
                 .clone()
                 .then(op_parser.then(base_parser).repeated())
@@ -214,7 +219,7 @@ fn parse_expr<'a>() -> AlgoParser<'a, Spanned<Expression>> {
         let logical_xor = parse_op(select! { TokenKind::Xor => Operator::Xor}, logical_and);
         parse_op(select! { TokenKind::Or => Operator::Or}, logical_xor)
     })
-    .labelled("ast_expr")
+    .labelled("parse_expr")
     .boxed()
 }
 
@@ -224,7 +229,7 @@ fn parse_primitive() -> impl Parser<TokenKind, Primitive, Error = Error> + Clone
         TokenKind::Boolean(x) => Primitive::Bool(x),
         TokenKind::String(x) => Primitive::String(x),
     }
-    .labelled("ast_value")
+    .labelled("parse_primitive")
 }
 
 fn parse_type() -> impl Parser<TokenKind, PrimitiveType, Error = Error> + Clone {
@@ -233,11 +238,11 @@ fn parse_type() -> impl Parser<TokenKind, PrimitiveType, Error = Error> + Clone 
         TokenKind::TypeBool => PrimitiveType::Bool,
         TokenKind::TypeStr => PrimitiveType::String,
     }
-    .labelled("ast_type")
+    .labelled("parse_type")
 }
 
 fn parse_symbol() -> impl Parser<TokenKind, Symbol, Error = Error> + Clone {
-    select! { TokenKind::Symbol(name) => name }.labelled("ast_symbol")
+    select! { TokenKind::Symbol(name) => name }.labelled("parse_symbol")
 }
 
 fn parse_tuple<'a>() -> AlgoParser<'a, Expression> {
@@ -250,7 +255,7 @@ fn parse_tuple<'a>() -> AlgoParser<'a, Expression> {
         .separated_by(just(TokenKind::Separator))
         .delimited_by(just(TokenKind::TupleOpen), just(TokenKind::TupleClose))
         .map(Expression::Tuple)
-        .labelled("ast_tuple")
+        .labelled("parse_tuple")
         .boxed()
 }
 
@@ -261,6 +266,6 @@ fn parse_array<'a>() -> AlgoParser<'a, Expression> {
         .separated_by(just(TokenKind::Separator))
         .delimited_by(just(TokenKind::ArrayOpen), just(TokenKind::ArrayClose))
         .map(Expression::Array)
-        .labelled("ast_array")
+        .labelled("parse_array")
         .boxed()
 }

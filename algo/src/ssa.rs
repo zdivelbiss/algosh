@@ -1,5 +1,5 @@
 use crate::{
-    parser::{Expression, HeapExpr},
+    parser::{Expression, HeapExpr, SpannedExpr},
     Error, Operator, Primitive, TupleComponent,
 };
 use intaglio::Symbol;
@@ -44,14 +44,14 @@ fn bind_push(nodes: &mut Vec<Instruction>, new_node: Instruction) -> Binding {
 }
 
 fn bind_expr(
-    expr: &HeapExpr,
+    expr: &SpannedExpr,
     nodes: &mut Vec<Instruction>,
     scopes: &mut Vec<Scope>,
 ) -> Result<Option<Binding>, Error> {
     match &expr.0 {
         Expression::Binary(lhs, op, rhs) => {
-            let lhs_binding = bind_expr(&lhs, nodes, scopes)?.unwrap();
-            let rhs_binding = bind_expr(&rhs, nodes, scopes)?.unwrap();
+            let lhs_binding = bind_expr(lhs.as_ref(), nodes, scopes)?.unwrap();
+            let rhs_binding = bind_expr(rhs.as_ref(), nodes, scopes)?.unwrap();
 
             match op {
                 Operator::Add => Ok(Some(bind_push(
@@ -91,9 +91,12 @@ fn bind_expr(
             Ok(binding)
         }
 
-        Expression::Flow { from: expr, to: next } => {
+        Expression::Flow {
+            from: expr,
+            to: next,
+        } => {
             scopes.push(Scope::new());
-            bind_expr(expr, nodes, scopes)?;
+            bind_expr(expr.as_ref(), nodes, scopes)?;
             if let Some(next) = next {
                 bind_expr(next, nodes, scopes)?;
             }
@@ -101,7 +104,20 @@ fn bind_expr(
             Ok(None)
         }
 
-        _ => unimplemented!(),
+        Expression::Control { exprs } => {
+            for expr in exprs {
+                bind_expr(expr, nodes, scopes)?;
+            }
+
+            Ok(None)
+        }
+
+        Expression::VarDef { name: _, expr } => {
+            // TODO bind it.... somehow?
+            bind_expr(expr.as_ref(), nodes, scopes)
+        }
+
+        expr => unimplemented!("{:?}", expr),
     }
 }
 
