@@ -1,8 +1,15 @@
 #![allow(dead_code)]
 
-extern crate algo;
+use std::io::Read;
 
 fn main() {
+    let mut buf = String::new();
+    // we naively assume success because I'm lazy.
+    std::fs::File::open("example.ash")
+        .and_then(|mut file| file.read_to_string(&mut buf))
+        .unwrap();
+
+    parse_input(buf.as_str());
 }
 
 fn parse_input(input: &str) -> Vec<algo::ssa::Instruction> {

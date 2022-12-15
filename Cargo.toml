@@ -1,20 +1,2 @@
-[package]
-name = "Algosh"
-version = "0.1.0"
-edition = "2021"
-
-
-[lib]
-name = "algo"
-path = "src/lib.rs"
-
-[[bin]]
-name = "algo-sh"
-path = "src/bin.rs"
-
-[dependencies]
-logos = "*"
-parking_lot = "*"
-intaglio = "*"
-chumsky = "*"
-ariadne = "*"
+[workspace]
+members = ["algo", "algo-sh"]
