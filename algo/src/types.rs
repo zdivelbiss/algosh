@@ -1,13 +1,17 @@
+use intaglio::Symbol;
+
 ///! Module defining everything related to the Algo type system.
 
 pub enum Type {
+    Unit, // is `()`
     Int,  // is `isize`
     UInt, // is `usize`
     Bool, // is `bool`
-    Unit, // is `()`
 
-    Tuple(Vec<Self>),
-    Array(Vec<Self>),
+    Tuple(Vec<(Option<Symbol>, Self)>),
+    Array { ty: Box<Self>, len: Option<usize> },
 
     Expression { input: Box<Self>, output: Box<Self> },
+
+    Named(Symbol)
 }

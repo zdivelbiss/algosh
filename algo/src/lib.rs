@@ -39,6 +39,8 @@ pub mod types;
 pub type Span = logos::Span;
 
 pub enum ErrorKind {
+    General(String),
+
     Unexpected {
         expected: Vec<TokenKind>,
         found: Option<TokenKind>,
@@ -63,6 +65,14 @@ pub struct Error {
 }
 
 impl Error {
+    pub const fn general(span: Span, msg: &str, label: Option<&'static str>) -> Self {
+        Self {
+            span,
+            kind: ErrorKind::General(msg.to_owned()),
+            label,
+        }
+    }
+
     pub const fn unexpected(
         span: Span,
         expected: Vec<TokenKind>,
@@ -96,16 +106,29 @@ impl Error {
         self.label
     }
 
+    fn label_msg(&self, msg: &str) -> String {
+        match self.label() {
+            Some(label) => format!("[{}] {}", label, msg),
+            None => msg.to_owned(),
+        }
+    }
+
     pub fn generate_report(&self) -> Report {
         use ariadne::*;
 
         match self.kind() {
+            ErrorKind::General(msg) => Report::build(ReportKind::Error, (), 8)
+                .with_message(msg)
+                .with_label(Label::new(self.span().clone()))
+                .finish(),
+
             ErrorKind::Unexpected { expected, found } => {
                 let mut msg = String::new();
                 if let Some(label) = self.label() {
                     msg.push_str(format!("[{}] ", label).as_str());
                 }
-                msg.push_str("unexpected input");
+
+                let mut msg = self.label_msg("unexpected input");
                 if let Some(found) = found {
                     msg.push_str(format!(", found '{}'", found.to_string()).as_str())
                 }
@@ -220,24 +243,10 @@ impl chumsky::Error<TokenKind> for Error {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Primitive {
+    Unit,
     Int(isize),
+    UInt(usize),
     Bool(bool),
-    String(intaglio::Symbol),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PrimitiveType {
-    // TODO add `Char` type
-    Int,
-    Bool,
-    String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum TupleComponent {
-    Valued(Primitive),
-    Typed(PrimitiveType),
-    Inferred,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

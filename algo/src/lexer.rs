@@ -29,12 +29,14 @@ pub enum TokenKind {
     #[token("type")]
     TypeDef,
 
+    #[token("()")]
+    TypeUnit,
     #[token("Int")]
     TypeInt,
+    #[token("UInt")]
+    TypeUInt,
     #[token("Bool")]
     TypeBool,
-    #[token("Str")]
-    TypeStr,
 
     #[token("+")]
     Add,
@@ -82,8 +84,10 @@ pub enum TokenKind {
     Flow,
 
     #[regex(r"![\d]+", lex_neg_integer)]
-    #[regex(r"[\d]+", |lex| lex.slice().parse(), priority = 2)]
+    #[regex(r"[\d]+", lex_pos_integer, priority = 3)]
     Integer(isize),
+    #[regex(r"[\d]+", lex_pos_uinteger, priority = 2)]
+    UInteger(usize),
     #[regex(r"true|false", |lex| lex.slice().parse())]
     Boolean(bool),
     #[regex(r#""[^"\\]*(?:\\.[^"\\]*)*""#, trim_and_cache)]
@@ -118,9 +122,10 @@ impl core::fmt::Display for TokenKind {
             TokenKind::ArrayClose => "]",
             TokenKind::VarDef => "var",
             TokenKind::TypeDef => "type",
+            TokenKind::TypeUnit => "()",
             TokenKind::TypeInt => "Int",
+            TokenKind::TypeUInt => "UInt",
             TokenKind::TypeBool => "Bool",
-            TokenKind::TypeStr => "Str",
             TokenKind::Add => "+",
             TokenKind::Sub => "-",
             TokenKind::Mul => "*",
@@ -163,6 +168,14 @@ fn trim_and_cache(lexer: &mut Lexer<TokenKind>) -> Symbol {
 
 fn lex_neg_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
     lexer.slice().replace('!', "-").as_str().parse().ok()
+}
+
+fn lex_pos_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
+    lexer.slice().parse().ok()
+}
+
+fn lex_pos_uinteger(lexer: &mut Lexer<TokenKind>) -> Option<usize> {
+    lexer.slice().parse().ok()
 }
 
 pub type Token = (TokenKind, Span);
