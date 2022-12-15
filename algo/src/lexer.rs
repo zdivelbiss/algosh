@@ -26,7 +26,7 @@ pub enum TokenKind {
 
     #[token("var")]
     VarDef,
-    #[token("ty")]
+    #[token("type")]
     TypeDef,
 
     #[token("Int")]
@@ -101,7 +101,7 @@ pub enum TokenKind {
 
     #[error]
     #[regex(r"[\s]+", logos::skip)]
-    #[regex(r"//[\S\t\v\r ]*\n?", logos::skip)]
+    #[regex(r"//.*", logos::skip)]
     Error,
 }
 

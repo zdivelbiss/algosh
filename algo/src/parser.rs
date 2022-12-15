@@ -41,7 +41,7 @@ pub fn parse(tokens: crate::lexer::Tokens) -> Result<Vec<HeapExpr>, Vec<Error>> 
     parse_aggregate().parse(tokens)
 }
 
-fn parse_aggregate<'a>() -> BoxedParser<'a, TokenKind, Vec<HeapExpr>, Error> {
+fn parse_aggregate<'a>() -> AlgoParser<'a, Vec<HeapExpr>> {
     choice((parse_vardef(), parse_typedef(), parse_flow()))
         .map(Box::new)
         .repeated()
@@ -69,7 +69,7 @@ fn parse_typedef() -> impl Parser<TokenKind, Spanned<Expression>, Error = Error>
         .labelled("ast_type_def")
 }
 
-fn parse_tld<'a>() -> BoxedParser<'a, TokenKind, (Spanned<Symbol>, Spanned<Expression>), Error> {
+fn parse_tld<'a>() -> AlgoParser<'a, (Spanned<Symbol>, Spanned<Expression>)> {
     parse_symbol()
         .map_with_span(|expr, span| (expr, span))
         .then_ignore(just(TokenKind::Assign))
@@ -79,56 +79,43 @@ fn parse_tld<'a>() -> BoxedParser<'a, TokenKind, (Spanned<Symbol>, Spanned<Expre
         .boxed()
 }
 
-fn parse_flow<'a>() -> BoxedParser<'a, TokenKind, Spanned<Expression>, Error> {
-    parse_control().separated_by(just(TokenKind::Flow)).map_with_span(|mut exprs, span| {
-        let first = exprs.pop().unwrap();
-        exprs.drain(..exprs.len()).fold(first, |expr, next| {
-            let (expr, span) = expr;
-            match expr.0 {
-                Expression::Control { exprs } => (),
-                _ => unreachable!()
-            }
-        })
+fn parse_flow<'a>() -> AlgoParser<'a, Spanned<Expression>> {
+    recursive(|expr| {
+        parse_control()
+            .then(just(TokenKind::Flow).ignore_then(expr).or_not())
+            .map_with_span(|(expr, next), span| {
+                (
+                    Expression::Flow {
+                        from: Box::new(expr),
+                        to: next.map(Box::new),
+                    },
+                    span,
+                )
+            })
     })
-
-
-    // recursive(|control| {
-    //     control
-    //         .then(just(TokenKind::Flow).ignore_then(parse_control()).or_not())
-    //         .map_with_span(|(expr, next), span| {
-    //             (
-    //                 Expression::Flow {
-    //                     from: Box::new(expr),
-    //                     to: next.map(Box::new),
-    //                 },
-    //                 span,
-    //             )
-    //         })
-    // })
-    // .labelled("ast_ctrl_flow")
-    // .boxed()
+    .labelled("ast_flow")
+    .boxed()
 }
 
-fn parse_control<'a>() -> BoxedParser<'a, TokenKind, Spanned<Expression>, Error> {
+fn parse_control<'a>() -> AlgoParser<'a, Spanned<Expression>> {
     choice((parse_array(), parse_tuple()))
         .map_with_span(|expr, span| (expr, span))
         .or(parse_expr())
         .separated_by(just(TokenKind::Terminator))
+        .at_least(1)
         .map_with_span(|exprs, span| (Expression::Control { exprs }, span))
         .labelled("ast_control")
         .boxed()
 }
 
-fn parse_expr<'a>() -> BoxedParser<'a, TokenKind, Spanned<Expression>, Error> {
+fn parse_expr<'a>() -> AlgoParser<'a, Spanned<Expression>> {
     recursive(|expr| {
         let atom = choice((
             parse_primitive().map(Expression::Primitive),
             parse_symbol().map(Expression::Identifier),
         ))
         .map_with_span(|expr, span| (expr, span))
-        .or(expr
-            .clone()
-            .delimited_by(just(TokenKind::GroupOpen), just(TokenKind::GroupClose)))
+        .or(expr.delimited_by(just(TokenKind::GroupOpen), just(TokenKind::GroupClose)))
         .recover_with(nested_delimiters(
             TokenKind::GroupOpen,
             TokenKind::GroupClose,
@@ -253,7 +240,7 @@ fn parse_symbol() -> impl Parser<TokenKind, Symbol, Error = Error> + Clone {
     select! { TokenKind::Symbol(name) => name }.labelled("ast_symbol")
 }
 
-fn parse_tuple<'a>() -> BoxedParser<'a, TokenKind, Expression, Error> {
+fn parse_tuple<'a>() -> AlgoParser<'a, Expression> {
     parse_symbol()
         .then_ignore(just(TokenKind::Assign))
         .then(choice((
@@ -267,7 +254,7 @@ fn parse_tuple<'a>() -> BoxedParser<'a, TokenKind, Expression, Error> {
         .boxed()
 }
 
-fn parse_array<'a>() -> BoxedParser<'a, TokenKind, Expression, Error> {
+fn parse_array<'a>() -> AlgoParser<'a, Expression> {
     parse_primitive()
         .map(Expression::Primitive)
         .map_with_span(|expr, span| (expr, span))

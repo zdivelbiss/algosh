@@ -13,7 +13,9 @@ fn main() {
 }
 
 fn parse_input(input: &str) -> Vec<algo::ssa::Instruction> {
-    match algo::parser::parse(algo::lexer::lex(input)).and_then(|ast| {
+    let tokens = algo::lexer::lex(input);
+    println!("{:?}", tokens);
+    match algo::parser::parse(tokens).and_then(|ast| {
         println!("{:?}", ast);
         algo::ssa::translate(ast.into_boxed_slice())
     }) {

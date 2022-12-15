@@ -100,7 +100,11 @@ impl Error {
 
         match self.kind() {
             ErrorKind::Unexpected { expected, found } => {
-                let mut msg = String::from("unexpected input");
+                let mut msg = String::new();
+                if let Some(label) = self.label() {
+                    msg.push_str(format!("[{}] ", label).as_str());
+                }
+                msg.push_str("unexpected input");
                 if let Some(found) = found {
                     msg.push_str(format!(", found '{}'", found.to_string()).as_str())
                 }
