@@ -2,6 +2,7 @@ use intaglio::Symbol;
 
 ///! Module defining everything related to the Algo type system.
 
+#[derive(Debug)]
 pub enum Type {
     Unit, // is `()`
     Int,  // is `isize`
@@ -13,5 +14,5 @@ pub enum Type {
 
     Expression { input: Box<Self>, output: Box<Self> },
 
-    Named(Symbol)
+    Checked(Symbol)
 }

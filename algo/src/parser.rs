@@ -78,25 +78,46 @@ fn parse_vardef() -> impl Parser<TokenKind, SpannedExpr, Error = Error> + Clone 
 //     recursive(|expr| choice(parsers))
 // }
 
-fn parse_array_type<'a>() -> AlgoParser<'a, Type> {
-    let only_usize = choice((
-        parse_uinteger(),
-        parse_integer().try_map(|int, span| {
-            usize::try_from(int)
-                .map_err(|_| Error::general(span, "array len cannot be negative", None))
-        }),
-    ));
-
+fn parse_tuple_type<'a>() -> AlgoParser<'a, Type> {
     recursive(|expr| {
+        parse_symbol()
+            .then_ignore(just(TokenKind::Assign))
+            .or_not()
+            .then(choice((parse_structural_type(), parse_array_type(), expr)))
+            .separated_by(just(TokenKind::Separator))
+            .at_least(1)
+            .delimited_by(just(TokenKind::TupleOpen), just(TokenKind::TupleClose))
+            .map(Type::Tuple)
+    })
+    .labelled("parse_tuple_type")
+    .boxed()
+}
+
+fn parse_array_type<'a>() -> AlgoParser<'a, Type> {
+    recursive(|expr| {
+        let only_usize = choice((
+            parse_uinteger(),
+            parse_integer().try_map(|int, span| {
+                usize::try_from(int)
+                    .map_err(|_| Error::general(span, "array len cannot be negative", None))
+            }),
+        ))
+        .boxed();
+
         choice((
             parse_structural_type(),
-            parse_symbol().map(Type::Named),
+            parse_symbol().map(Type::Checked),
             expr,
         ))
         .then(just(TokenKind::Separator).ignore_then(only_usize).or_not())
         .delimited_by(just(TokenKind::ArrayOpen), just(TokenKind::ArrayClose))
-        .map(|(base_ty, len)| Type::Array { ty: base_ty, len })
+        .map(|(base_ty, len)| Type::Array {
+            ty: Box::new(base_ty),
+            len,
+        })
     })
+    .labelled("parse_array_type")
+    .boxed()
 }
 
 fn parse_structural_type<'a>() -> impl Parser<TokenKind, Type, Error = Error> {
@@ -112,11 +133,13 @@ fn parse_structural_type<'a>() -> impl Parser<TokenKind, Type, Error = Error> {
 fn parse_type_test<'a>() {
     static SIMPLE_ARRAY: &str = "[Int]";
     static SIMPLE_ARRAY_LEN: &str = "[Int, 64]";
-    static FULL_TYPE_STR: &str = "{ { a: Int, Int, [UInt, 64] }, Int, Bool }";
+    static COMPLEX_ARRAY_LEN: &str = "[[Int, 64], 56]";
+    static COMPLEX_TUPLE: &str = "{ { a: Int, Int, [UInt, 64] }, Int, Bool }";
 
-    parse_array_type()
-        .parse_recovery_verbose(SIMPLE_ARRAY)
-        .unwrap();
+    let tokens = crate::lexer::lex(COMPLEX_TUPLE);
+    dbg!(&tokens);
+    let ast = parse_tuple_type().parse_recovery_verbose(tokens);
+    dbg!(&ast);
 }
 
 fn parse_flow<'a>() -> AlgoParser<'a, SpannedExpr> {
@@ -259,7 +282,12 @@ fn parse_expr<'a>() -> AlgoParser<'a, SpannedExpr> {
 }
 
 fn parse_primitive() -> impl Parser<TokenKind, Primitive, Error = Error> + Clone {
-    choice((parse_integer(), parse_uinteger(), parse_bool())).labelled("parse_primitive")
+    choice((
+        parse_integer().map(Primitive::Int),
+        parse_uinteger().map(Primitive::UInt),
+        parse_bool().map(Primitive::Bool),
+    ))
+    .labelled("parse_primitive")
 }
 
 fn parse_integer() -> impl Parser<TokenKind, isize, Error = Error> + Clone {
@@ -271,7 +299,7 @@ fn parse_uinteger() -> impl Parser<TokenKind, usize, Error = Error> + Clone {
 }
 
 fn parse_bool() -> impl Parser<TokenKind, bool, Error = Error> + Clone {
-    select! { TokenKind::Bool(x) => x }.labelled("parse_bool")
+    select! { TokenKind::Boolean(x) => x }.labelled("parse_bool")
 }
 
 // fn parse_type() -> impl Parser<TokenKind, Type, Error = Error> + Clone {
@@ -296,6 +324,7 @@ fn parse_tuple<'a>() -> AlgoParser<'a, Expression> {
                 .or_not(),
         )
         .separated_by(just(TokenKind::Separator))
+        .at_least(1)
         .delimited_by(just(TokenKind::TupleOpen), just(TokenKind::TupleClose))
         .map(Expression::Tuple)
         .labelled("parse_tuple")
@@ -307,6 +336,7 @@ fn parse_array<'a>() -> AlgoParser<'a, Expression> {
         .map(Expression::Primitive)
         .map_with_span(|expr, span| (expr, span))
         .separated_by(just(TokenKind::Separator))
+        .at_least(1)
         .delimited_by(just(TokenKind::ArrayOpen), just(TokenKind::ArrayClose))
         .map(Expression::Array)
         .labelled("parse_array")

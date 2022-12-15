@@ -1,6 +1,6 @@
 use crate::{
     parser::{Expression, HeapExpr, SpannedExpr},
-    Error, Operator, Primitive, TupleComponent,
+    Error, Operator, Primitive,
 };
 use intaglio::Symbol;
 use std::collections::BTreeMap;
@@ -74,22 +74,22 @@ fn bind_expr(
             Some(binding) => Ok(Some(binding)),
             None => Err(Error::undeclared_var(
                 expr.1.clone(),
-                crate::strings::get_intern_str(*symbol),
+                crate::strings::get_intern_str(*symbol).as_str(),
                 Some("ssa_identifier"),
             )),
         },
 
-        Expression::Tuple(components) => {
-            let mut binding = None;
-            let current_scope = scopes.last_mut().unwrap();
-            for (name, component) in components {
-                let TupleComponent::Valued(primitive) = component else { unimplemented!() };
-                binding = Some(bind_push(nodes, Instruction::Bind(*primitive)));
-                current_scope.insert(*name, binding.unwrap());
-            }
+        // Expression::Tuple(components) => {
+        //     let mut binding = None;
+        //     let current_scope = scopes.last_mut().unwrap();
+        //     for (name, component) in components {
+        //         let TupleComponent::Valued(primitive) = component else { unimplemented!() };
+        //         binding = Some(bind_push(nodes, Instruction::Bind(*primitive)));
+        //         current_scope.insert(*name, binding.unwrap());
+        //     }
 
-            Ok(binding)
-        }
+        //     Ok(binding)
+        // }
 
         Expression::Flow {
             from: expr,

@@ -38,6 +38,7 @@ pub mod types;
 
 pub type Span = logos::Span;
 
+#[derive(Debug, Clone)]
 pub enum ErrorKind {
     General(String),
 
@@ -58,6 +59,7 @@ pub enum ErrorKind {
     },
 }
 
+#[derive(Debug, Clone)]
 pub struct Error {
     span: Span,
     kind: ErrorKind,
@@ -65,7 +67,7 @@ pub struct Error {
 }
 
 impl Error {
-    pub const fn general(span: Span, msg: &str, label: Option<&'static str>) -> Self {
+    pub fn general(span: Span, msg: &str, label: Option<&'static str>) -> Self {
         Self {
             span,
             kind: ErrorKind::General(msg.to_owned()),
@@ -73,7 +75,7 @@ impl Error {
         }
     }
 
-    pub const fn unexpected(
+    pub fn unexpected(
         span: Span,
         expected: Vec<TokenKind>,
         found: Option<TokenKind>,
@@ -86,10 +88,12 @@ impl Error {
         }
     }
 
-    pub const fn undeclared_var(span: Span, var_name: String, label: Option<&'static str>) -> Self {
+    pub fn undeclared_var(span: Span, var_name: &str, label: Option<&'static str>) -> Self {
         Self {
             span,
-            kind: ErrorKind::UndeclaredVar { var_name },
+            kind: ErrorKind::UndeclaredVar {
+                var_name: var_name.to_owned(),
+            },
             label,
         }
     }
