@@ -2,7 +2,7 @@ use intaglio::Symbol;
 
 ///! Module defining everything related to the Algo type system.
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Type {
     Unit, // is `()`
     Int,  // is `isize`

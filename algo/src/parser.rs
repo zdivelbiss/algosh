@@ -14,11 +14,12 @@ pub enum Expression {
     Primitive(Primitive),
     Identifier(Symbol),
 
-    // TODO: Figure out how to implement tuples and arrays in the type system.
-    Tuple(Vec<(Symbol, Option<Primitive>)>),
-    Array(Vec<SpannedExpr>),
-
     Binary(HeapExpr, Operator, HeapExpr),
+
+    TypeDef {
+        name: Symbol,
+        ty: Type,
+    },
 
     VarDef {
         name: Symbol,
@@ -46,22 +47,19 @@ pub fn parse(tokens: crate::lexer::Tokens) -> Result<Vec<HeapExpr>, Vec<Error>> 
 }
 
 fn parse_aggregate<'a>() -> AlgoParser<'a, Vec<HeapExpr>> {
-    choice((parse_vardef(), parse_flow()))
+    choice((parse_typedef(), parse_vardef(), parse_flow()))
         .map(Box::new)
         .repeated()
         .then_ignore(end())
         .boxed()
 }
 
-fn parse_vardef() -> impl Parser<TokenKind, SpannedExpr, Error = Error> + Clone {
+fn parse_vardef<'a>() -> AlgoParser<'a, SpannedExpr> {
     just(TokenKind::VarDef)
         .ignore_then(parse_symbol())
         .then_ignore(just(TokenKind::Assign))
         .then(parse_flow())
-        .then_ignore(choice((
-            just(TokenKind::Terminator).ignored(),
-            end().ignored(),
-        )))
+        .then_ignore(just(TokenKind::Terminator))
         .map_with_span(|(name, expr), span| {
             (
                 Expression::VarDef {
@@ -72,46 +70,53 @@ fn parse_vardef() -> impl Parser<TokenKind, SpannedExpr, Error = Error> + Clone 
             )
         })
         .labelled("parse_vardef")
+        .boxed()
 }
 
-// fn parse_type<'a>() -> AlgoParser<'a, Type> {
-//     recursive(|expr| choice(parsers))
-// }
+fn parse_typedef<'a>() -> AlgoParser<'a, SpannedExpr> {
+    just(TokenKind::TypeDef)
+        .ignore_then(parse_symbol())
+        .then_ignore(just(TokenKind::Assign))
+        .then(parse_type())
+        .then_ignore(just(TokenKind::Terminator))
+        .map_with_span(|(name, ty), span| (Expression::TypeDef { name, ty }, span))
+        .labelled("parse_typedef")
+        .boxed()
+}
 
-#[test]
-fn parse_type_test<'a>() {
-    static SIMPLE_ARRAY: &str = "[Int]";
-    static SIMPLE_ARRAY_LEN: &str = "[Int, 64]";
-    static COMPLEX_ARRAY_LEN: &str = "[[Int, 64], 56]";
-    static COMPLEX_TUPLE: &str = "{ { a: Int, Int, [UInt, 64] }, Int, Bool }";
-
-    let tokens = crate::lexer::lex(COMPLEX_TUPLE);
-    dbg!(&tokens);
-    let ast = parse_tuple_type().parse_recovery_verbose(tokens);
-    dbg!(&ast);
+fn parse_type<'a>() -> impl Parser<TokenKind, Type, Error = Error> {
+    choice((
+        parse_tuple_type(),
+        parse_array_type(),
+        parse_structural_type(),
+    ))
 }
 
 fn parse_tuple_type<'a>() -> AlgoParser<'a, Type> {
     recursive(|expr| {
-        let named_component = parse_symbol()
+        parse_symbol()
             .then_ignore(just(TokenKind::Assign))
-            .then(choice((
-                parse_structural_type(),
-                parse_array_type(),
-                expr.clone(),
-            )))
-            .map(|(s, t)| (Some(s), t))
+            .or_not()
+            .then(choice((expr, parse_array_type(), parse_structural_type())))
             .separated_by(just(TokenKind::Separator))
-            .at_least(1);
-
-        let unnamed_component = choice((parse_structural_type(), parse_array_type(), expr.clone()))
-            .map(|t| (None, t))
-            .separated_by(just(TokenKind::Separator))
-            .at_least(1);
-
-        choice((named_component, unnamed_component))
+            .at_least(1)
             .delimited_by(just(TokenKind::TupleOpen), just(TokenKind::TupleClose))
-            .map(Type::Tuple)
+            .try_map(|components, span| {
+                // Checking naming uniformity here instead of parsing sensitively is probably
+                // technically slower, but this is much more readable.
+                let is_valid_named = components.iter().all(|(n, _)| n.is_some());
+                let is_valid_unnamed = components.iter().all(|(n, _)| n.is_none());
+
+                if is_valid_named || is_valid_unnamed {
+                    Ok(Type::Tuple(components))
+                } else {
+                    Err(Error::general(
+                        span,
+                        "tuples must either be fully named or fully unnamed",
+                        None,
+                    ))
+                }
+            })
     })
     .labelled("parse_tuple_type")
     .boxed()
