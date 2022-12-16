@@ -14,7 +14,11 @@ pub enum Expression {
     Primitive(Primitive),
     Identifier(Symbol),
 
-    Binary(HeapExpr, Operator, HeapExpr),
+    Binary {
+        lhs: HeapExpr,
+        op: Operator,
+        rhs: HeapExpr,
+    },
 
     TypeDef {
         name: Symbol,
@@ -178,7 +182,7 @@ fn parse_flow<'a>() -> AlgoParser<'a, SpannedExpr> {
 
 fn parse_control<'a>() -> AlgoParser<'a, SpannedExpr> {
     choice((parse_array(), parse_tuple()))
-        .map_with_span(|expr, span| (expr, span))
+        .map_with_span(|prim, span| (Expression::Primitive(prim), span))
         .or(parse_expr())
         .separated_by(just(TokenKind::Terminator))
         .at_least(1)
@@ -232,9 +236,16 @@ fn parse_expr<'a>() -> AlgoParser<'a, SpannedExpr> {
             base_parser
                 .clone()
                 .then(op_parser.then(base_parser).repeated())
-                .foldl(|a, (op, b)| {
-                    let span = a.1.start..b.1.end;
-                    (Expression::Binary(Box::new(a), op, Box::new(b)), span)
+                .foldl(|lhs, (op, rhs)| {
+                    let span = lhs.1.start..rhs.1.end;
+                    (
+                        Expression::Binary {
+                            lhs: Box::new(lhs),
+                            op,
+                            rhs: Box::new(rhs),
+                        },
+                        span,
+                    )
                 })
                 .boxed()
         }
@@ -318,21 +329,11 @@ fn parse_bool() -> impl Parser<TokenKind, bool, Error = Error> + Clone {
     select! { TokenKind::Boolean(x) => x }.labelled("parse_bool")
 }
 
-// fn parse_type() -> impl Parser<TokenKind, Type, Error = Error> + Clone {
-//     select! {
-//         TokenKind::TypeUnit => Type::Unit,
-//         TokenKind::TypeInt => Type::Int,
-//         TokenKind::TypeUInt => Type::UInt,
-//         TokenKind::TypeBool => Type::Bool,
-//     }
-//     .labelled("parse_type")
-// }
-
 fn parse_symbol() -> impl Parser<TokenKind, Symbol, Error = Error> + Clone {
     select! { TokenKind::Symbol(name) => name }.labelled("parse_symbol")
 }
 
-fn parse_tuple<'a>() -> AlgoParser<'a, Expression> {
+fn parse_tuple<'a>() -> AlgoParser<'a, Primitive> {
     parse_symbol()
         .then(
             just(TokenKind::Assign)
@@ -342,19 +343,19 @@ fn parse_tuple<'a>() -> AlgoParser<'a, Expression> {
         .separated_by(just(TokenKind::Separator))
         .at_least(1)
         .delimited_by(just(TokenKind::TupleOpen), just(TokenKind::TupleClose))
-        .map(Expression::Tuple)
+        .map(Primitive::Tuple)
         .labelled("parse_tuple")
         .boxed()
 }
 
-fn parse_array<'a>() -> AlgoParser<'a, Expression> {
+fn parse_array<'a>() -> AlgoParser<'a, Primitive> {
     parse_primitive()
         .map(Expression::Primitive)
         .map_with_span(|expr, span| (expr, span))
         .separated_by(just(TokenKind::Separator))
         .at_least(1)
         .delimited_by(just(TokenKind::ArrayOpen), just(TokenKind::ArrayClose))
-        .map(Expression::Array)
+        .map(Primitive::Array)
         .labelled("parse_array")
         .boxed()
 }

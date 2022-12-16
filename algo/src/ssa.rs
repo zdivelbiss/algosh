@@ -49,7 +49,7 @@ fn bind_expr(
     scopes: &mut Vec<Scope>,
 ) -> Result<Option<Binding>, Error> {
     match &expr.0 {
-        Expression::Binary(lhs, op, rhs) => {
+        Expression::Binary { lhs, op, rhs } => {
             let lhs_binding = bind_expr(lhs.as_ref(), nodes, scopes)?.unwrap();
             let rhs_binding = bind_expr(rhs.as_ref(), nodes, scopes)?.unwrap();
 
@@ -78,18 +78,6 @@ fn bind_expr(
                 Some("ssa_identifier"),
             )),
         },
-
-        // Expression::Tuple(components) => {
-        //     let mut binding = None;
-        //     let current_scope = scopes.last_mut().unwrap();
-        //     for (name, component) in components {
-        //         let TupleComponent::Valued(primitive) = component else { unimplemented!() };
-        //         binding = Some(bind_push(nodes, Instruction::Bind(*primitive)));
-        //         current_scope.insert(*name, binding.unwrap());
-        //     }
-
-        //     Ok(binding)
-        // }
 
         Expression::Flow {
             from: expr,

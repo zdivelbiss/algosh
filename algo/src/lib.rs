@@ -1,12 +1,7 @@
 #![feature(
     if_let_guard,                   // #51114 <https://github.com/rust-lang/rust/issues/51114>
-    let_chains,                     // 53667 <https://github.com/rust-lang/rust/issues/53667>
-    pattern,
-    anonymous_lifetime_in_impl_trait,
-    try_trait_v2,
-    once_cell,
-    option_result_contains,
-    type_alias_impl_trait
+    let_chains,                     // #53667 <https://github.com/rust-lang/rust/issues/53667>
+    once_cell,                      // #74465 <https://github.com/rust-lang/rust/issues/74465>
 )]
 #![deny(
     clippy::semicolon_if_nothing_returned,
@@ -246,7 +241,7 @@ impl chumsky::Error<TokenKind> for Error {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Primitive {
     Unit,
     Int(isize),
