@@ -83,9 +83,9 @@ pub enum TokenKind {
     #[token("=>")]
     Flow,
 
-    #[regex(r"!?\d+[IU]?", lex_integer, priority = 3)]
+    #[regex(r"!?\d+I?", lex_integer, priority = 3)]
     Integer(isize),
-    #[regex(r"\d+[IU]?", lex_uinteger, priority = 2)]
+    #[regex(r"\d+U?", lex_uinteger, priority = 2)]
     UInteger(usize),
     #[regex(r"true|false", |lex| lex.slice().parse())]
     Boolean(bool),
@@ -98,9 +98,6 @@ pub enum TokenKind {
     EnvVar(Symbol),
     #[regex(r"\$[\w]+", trim_and_cache)]
     EnvCmd(Symbol),
-
-    #[token("exit")]
-    Exit,
 
     #[error]
     #[regex(r"[\s]+", logos::skip)]
@@ -193,18 +190,6 @@ fn trim_and_cache(lexer: &mut Lexer<TokenKind>) -> Symbol {
     )
 }
 
-fn lex_neg_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
-    lexer.slice().replace('!', "-").as_str().parse().ok()
-}
-
-fn lex_pos_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
-    lexer.slice().parse().ok()
-}
-
-fn lex_pos_uinteger(lexer: &mut Lexer<TokenKind>) -> Option<usize> {
-    lexer.slice().parse().ok()
-}
-
 pub type Token = (TokenKind, Span);
 
 #[derive(Debug)]
@@ -241,5 +226,35 @@ pub fn lex(input: &str) -> Tokens {
     Tokens {
         tokens: tokens.into_boxed_slice(),
         index: 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{lexer::TokenKind, tests::lex_and_eq};
+
+    #[test]
+    fn integer() {
+        lex_and_eq("12345", [TokenKind::Integer(12345)].into_iter());
+    }
+
+    #[test]
+    fn neg_integer() {
+        lex_and_eq("!12345I", [TokenKind::Integer(!12345)].into_iter())
+    }
+
+    #[test]
+    fn integer_i() {
+        lex_and_eq("12345I", [TokenKind::Integer(12345)].into_iter());
+    }
+
+    #[test]
+    fn neg_integer_i() {
+        lex_and_eq("!12345I", [TokenKind::Integer(!12345)].into_iter())
+    }
+
+    #[test]
+    fn uinteger_u() {
+        lex_and_eq("12345U", [TokenKind::UInteger(12345)].into_iter());
     }
 }
