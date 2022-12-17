@@ -6,6 +6,7 @@ use intaglio::Symbol;
 use std::collections::BTreeMap;
 
 pub type Scope = BTreeMap<Symbol, Binding>;
+pub type Scopes = Vec<BTreeMap<Symbol, Binding>>;
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -18,7 +19,7 @@ pub enum Instruction {
     Sub(Binding, Binding),
 }
 
-pub fn translate(expr: &SpannedExpr) -> Result<(Vec<Instruction>, Vec<Scope>), Error> {
+pub fn translate(expr: &SpannedExpr) -> Result<(Vec<Instruction>, Scopes), Error> {
     let mut nodes = Vec::new();
     let mut scopes = vec![Scope::new()];
 
@@ -35,7 +36,7 @@ fn bind_push(nodes: &mut Vec<Instruction>, new_node: Instruction) -> Binding {
 fn bind_expr(
     expr: &SpannedExpr,
     nodes: &mut Vec<Instruction>,
-    scopes: &mut Vec<Scope>,
+    scopes: &mut Scopes,
 ) -> Result<Option<Binding>, Error> {
     match &expr.0 {
         Expression::Binary { lhs, op, rhs } => {
@@ -60,7 +61,7 @@ fn bind_expr(
         Expression::Primitive(primitive) => {
             Ok(Some(bind_push(nodes, Instruction::Bind(primitive.clone()))))
         }
-        Expression::Identifier(symbol) => match find_var_binding(symbol, scopes) {
+        Expression::Identifier(symbol) => match find_var_binding(*symbol, scopes) {
             Some(binding) => Ok(Some(binding)),
             None => Err(Error::undeclared_var(
                 expr.1.clone(),
@@ -94,9 +95,6 @@ fn bind_expr(
     }
 }
 
-fn find_var_binding(symbol: &Symbol, scopes: &mut Vec<Scope>) -> Option<Binding> {
-    scopes
-        .iter()
-        .rev()
-        .find_map(|scope| scope.get(symbol).cloned())
+fn find_var_binding(symbol: Symbol, scopes: &mut Scopes) -> Option<Binding> {
+    scopes.iter().rev().find_map(|scope| scope.get(&symbol).copied())
 }

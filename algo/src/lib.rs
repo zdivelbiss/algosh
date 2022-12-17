@@ -13,6 +13,8 @@
     clippy::unreadable_literal,
     clippy::wildcard_imports,
     clippy::wildcard_dependencies,
+    clippy::similar_names,
+    clippy::bool_to_int_with_if,
     dead_code
 )]
 
@@ -106,7 +108,7 @@ impl Error {
 
     fn label_msg(&self, msg: &str) -> String {
         match self.label() {
-            Some(label) => format!("[{}] {}", label, msg),
+            Some(label) => format!("[{label}] {msg}"),
             None => msg.to_owned(),
         }
     }
@@ -123,12 +125,12 @@ impl Error {
             ErrorKind::Unexpected { expected, found } => {
                 let mut msg = String::new();
                 if let Some(label) = self.label() {
-                    msg.push_str(format!("[{}] ", label).as_str());
+                    msg.push_str(format!("[{label}] ").as_str());
                 }
 
                 let mut msg = self.label_msg("unexpected input");
                 if let Some(found) = found {
-                    msg.push_str(format!(", found '{}'", found.to_string()).as_str())
+                    msg.push_str(format!(", found '{found}'").as_str());
                 }
 
                 let mut report = Report::build(ReportKind::Error, (), 8)
@@ -139,17 +141,20 @@ impl Error {
                             .with_color(Color::Default),
                     );
 
-                if expected.len() == 1 {
-                    report = report.with_note(format!("expected '{}'", expected[0].to_string()))
-                } else if expected.len() > 1 {
-                    report = report.with_note(format!(
-                        "expected one of {}",
-                        expected
-                            .iter()
-                            .map(|t| format!("'{}'", t.to_string()))
-                            .collect::<Vec<String>>()
-                            .join(", ")
-                    ))
+                match expected.len() {
+                    1 => report = report.with_note(format!("expected '{}'", expected[0])),
+                    len if len > 1 => {
+                        report = report.with_note(format!(
+                            "expected one of {}",
+                            expected
+                                .iter()
+                                .map(|t| format!("'{t}'"))
+                                .collect::<Vec<String>>()
+                                .join(", ")
+                        ));
+                    }
+
+                    _ => {}
                 }
 
                 report.finish()
@@ -180,7 +185,7 @@ impl Error {
                 .finish(),
 
             ErrorKind::UndeclaredVar { var_name } => Report::build(ReportKind::Error, (), 8)
-                .with_message(format!("use of undeclared variable `{}`", var_name))
+                .with_message(format!("use of undeclared variable `{var_name}`"))
                 .with_label(Label::new(self.span().clone()))
                 .finish(),
         }
@@ -199,7 +204,7 @@ impl chumsky::Error<TokenKind> for Error {
         Self {
             span,
             kind: ErrorKind::Unexpected {
-                expected: expected.into_iter().filter_map(|opt| opt).collect(),
+                expected: expected.into_iter().flatten().collect(),
                 found,
             },
             label: None,

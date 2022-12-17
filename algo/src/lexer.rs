@@ -83,10 +83,9 @@ pub enum TokenKind {
     #[token("=>")]
     Flow,
 
-    #[regex(r"![\d]+", lex_neg_integer)]
-    #[regex(r"[\d]+", lex_pos_integer, priority = 3)]
+    #[regex(r"!?\d+[IU]?", lex_integer, priority = 3)]
     Integer(isize),
-    #[regex(r"[\d]+", lex_pos_uinteger, priority = 2)]
+    #[regex(r"\d+[IU]?", lex_uinteger, priority = 2)]
     UInteger(usize),
     #[regex(r"true|false", |lex| lex.slice().parse())]
     Boolean(bool),
@@ -107,6 +106,34 @@ pub enum TokenKind {
     #[regex(r"[\s]+", logos::skip)]
     #[regex(r"//.*", logos::skip)]
     Error,
+}
+
+fn lex_integer(lexer: &mut Lexer<TokenKind>) -> Option<isize> {
+    let slice = lexer.slice();
+
+    let back_offset = if slice.ends_with('I') {
+        slice.len() - 1
+    } else {
+        slice.len()
+    };
+    let front_offset = if slice.starts_with('!') { 1 } else { 0 };
+
+    slice[front_offset..back_offset]
+        .parse::<isize>()
+        .map(|int| if front_offset > 0 { !int } else { int })
+        .ok()
+}
+
+fn lex_uinteger(lexer: &mut Lexer<TokenKind>) -> Option<usize> {
+    let slice = lexer.slice();
+
+    let back_offset = if slice.ends_with('U') {
+        slice.len() - 1
+    } else {
+        slice.len()
+    };
+
+    slice[0..back_offset].parse::<usize>().ok()
 }
 
 impl core::fmt::Display for TokenKind {

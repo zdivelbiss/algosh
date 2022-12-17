@@ -95,7 +95,7 @@ fn parse_typedef<'a>() -> AlgoParser<'a, SpannedExpr> {
         .boxed()
 }
 
-fn parse_type<'a>() -> impl Parser<TokenKind, Type, Error = Error> {
+fn parse_type() -> impl Parser<TokenKind, Type, Error = Error> {
     choice((
         parse_tuple_type(),
         parse_array_type(),
@@ -160,7 +160,7 @@ fn parse_array_type<'a>() -> AlgoParser<'a, Type> {
     .boxed()
 }
 
-fn parse_structural_type<'a>() -> impl Parser<TokenKind, Type, Error = Error> {
+fn parse_structural_type() -> impl Parser<TokenKind, Type, Error = Error> {
     select! {
         TokenKind::TypeUnit => Type::Unit,
         TokenKind::TypeInt => Type::Int,
@@ -198,6 +198,7 @@ fn parse_control<'a>() -> AlgoParser<'a, SpannedExpr> {
         .boxed()
 }
 
+#[allow(clippy::too_many_lines)]
 fn parse_expr<'a>() -> AlgoParser<'a, SpannedExpr> {
     recursive(|expr| {
         let atom = choice((
