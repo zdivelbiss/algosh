@@ -1,11 +1,10 @@
-use crate::{lexer::TokenKind, types::Type, Error, Operator, Primitive};
+use crate::{lexer::TokenKind, strings::Symbol, types::Type, Error, Operator, Primitive};
 use chumsky::{
     primitive::{choice, end, just},
     recovery::nested_delimiters,
     recursive::recursive,
     select, BoxedParser, Parser,
 };
-use intaglio::Symbol;
 
 #[derive(Debug, PartialEq)]
 pub enum Expression {

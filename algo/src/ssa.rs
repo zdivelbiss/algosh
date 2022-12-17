@@ -1,8 +1,8 @@
 use crate::{
     parser::{Expression, SpannedExpr},
+    strings::Symbol,
     Error, Operator, Primitive,
 };
-use intaglio::Symbol;
 use std::collections::BTreeMap;
 
 pub type Scope = BTreeMap<Symbol, Binding>;
@@ -96,5 +96,8 @@ fn bind_expr(
 }
 
 fn find_var_binding(symbol: Symbol, scopes: &mut Scopes) -> Option<Binding> {
-    scopes.iter().rev().find_map(|scope| scope.get(&symbol).copied())
+    scopes
+        .iter()
+        .rev()
+        .find_map(|scope| scope.get(&symbol).copied())
 }

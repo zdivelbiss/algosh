@@ -1,4 +1,6 @@
-use intaglio::{Symbol, SymbolTable};
+pub use intaglio::Symbol;
+
+use intaglio::SymbolTable;
 use parking_lot::RwLock;
 
 lazy_static::lazy_static! {

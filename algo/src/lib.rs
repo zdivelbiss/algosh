@@ -25,6 +25,7 @@ use lexer::TokenKind;
 pub mod lexer;
 pub mod ssa;
 // pub mod optimizer;
+pub mod linearizer;
 pub mod parser;
 pub mod strings;
 pub mod types;

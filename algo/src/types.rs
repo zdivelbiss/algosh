@@ -1,4 +1,4 @@
-use intaglio::Symbol;
+use crate::strings::Symbol;
 
 ///! Module defining everything related to the Algo type system.
 
@@ -14,5 +14,5 @@ pub enum Type {
 
     Expression { input: Box<Self>, output: Box<Self> },
 
-    Checked(Symbol)
+    Checked(Symbol),
 }
