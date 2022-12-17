@@ -27,6 +27,7 @@ pub enum Expression {
 
     VarDef {
         name: Symbol,
+        in_ty: Option<Type>,
         expr: HeapExpr,
     },
 
@@ -62,12 +63,18 @@ fn parse_vardef<'a>() -> AlgoParser<'a, SpannedExpr> {
     just(TokenKind::VarDef)
         .ignore_then(parse_symbol())
         .then_ignore(just(TokenKind::Assign))
+        .then(
+            parse_tuple_type()
+                .then_ignore(just(TokenKind::Flow))
+                .or_not(),
+        )
         .then(parse_flow())
         .then_ignore(just(TokenKind::Terminator))
-        .map_with_span(|(name, expr), span| {
+        .map_with_span(|((name, in_ty), expr), span| {
             (
                 Expression::VarDef {
                     name,
+                    in_ty,
                     expr: Box::new(expr),
                 },
                 span,
@@ -335,6 +342,7 @@ fn parse_symbol() -> impl Parser<TokenKind, Symbol, Error = Error> + Clone {
 
 fn parse_tuple<'a>() -> AlgoParser<'a, Primitive> {
     parse_symbol()
+        .map(Some)
         .then(
             just(TokenKind::Assign)
                 .ignore_then(parse_primitive())
@@ -350,12 +358,27 @@ fn parse_tuple<'a>() -> AlgoParser<'a, Primitive> {
 
 fn parse_array<'a>() -> AlgoParser<'a, Primitive> {
     parse_primitive()
-        .map(Expression::Primitive)
-        .map_with_span(|expr, span| (expr, span))
         .separated_by(just(TokenKind::Separator))
         .at_least(1)
         .delimited_by(just(TokenKind::ArrayOpen), just(TokenKind::ArrayClose))
         .map(Primitive::Array)
         .labelled("parse_array")
         .boxed()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{intern, tests::parse_and_eq, Primitive};
+
+    #[test]
+    fn parse_tuple() {
+        parse_and_eq(
+            "{ a: 1, b: false }",
+            super::parse_tuple(),
+            &Primitive::Tuple(vec![
+                (Some(intern!("a")), Some(Primitive::Int(1))),
+                (Some(intern!("b")), Some(Primitive::Bool(false))),
+            ]),
+        )
+    }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    parser::{Expression, HeapExpr, SpannedExpr},
+    parser::{Expression, SpannedExpr},
     Error, Operator, Primitive,
 };
 use intaglio::Symbol;
@@ -18,22 +18,11 @@ pub enum Instruction {
     Sub(Binding, Binding),
 }
 
-pub fn translate(ast: Box<[HeapExpr]>) -> Result<(Vec<Instruction>, Vec<Scope>), Vec<Error>> {
+pub fn translate(expr: &SpannedExpr) -> Result<(Vec<Instruction>, Vec<Scope>), Error> {
     let mut nodes = Vec::new();
     let mut scopes = vec![Scope::new()];
-    let mut errs = Vec::new();
 
-    for expr in ast.iter() {
-        if let Err(err) = bind_expr(&expr, &mut nodes, &mut scopes) {
-            errs.push(err);
-        }
-    }
-
-    if errs.is_empty() {
-        Ok((nodes, scopes))
-    } else {
-        Err(errs)
-    }
+    bind_expr(expr, &mut nodes, &mut scopes).map(|_| (nodes, scopes))
 }
 
 fn bind_push(nodes: &mut Vec<Instruction>, new_node: Instruction) -> Binding {
@@ -50,6 +39,7 @@ fn bind_expr(
 ) -> Result<Option<Binding>, Error> {
     match &expr.0 {
         Expression::Binary { lhs, op, rhs } => {
+            // TODO uninitialized variable error
             let lhs_binding = bind_expr(lhs.as_ref(), nodes, scopes)?.unwrap();
             let rhs_binding = bind_expr(rhs.as_ref(), nodes, scopes)?.unwrap();
 
@@ -68,7 +58,7 @@ fn bind_expr(
         }
 
         Expression::Primitive(primitive) => {
-            Ok(Some(bind_push(nodes, Instruction::Bind(*primitive))))
+            Ok(Some(bind_push(nodes, Instruction::Bind(primitive.clone()))))
         }
         Expression::Identifier(symbol) => match find_var_binding(symbol, scopes) {
             Some(binding) => Ok(Some(binding)),
@@ -100,12 +90,7 @@ fn bind_expr(
             Ok(None)
         }
 
-        Expression::VarDef { name: _, expr } => {
-            // TODO bind it.... somehow?
-            bind_expr(expr.as_ref(), nodes, scopes)
-        }
-
-        expr => unimplemented!("{:?}", expr),
+        expr => unimplemented!("no SSA path: {:?}", expr),
     }
 }
 
