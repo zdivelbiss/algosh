@@ -1,10 +1,9 @@
-use std::sync::LazyLock;
-
-use intaglio::Symbol;
+use intaglio::{Symbol, SymbolTable};
 use parking_lot::RwLock;
 
-static STRING_CACHE: LazyLock<RwLock<intaglio::SymbolTable>> =
-    LazyLock::new(|| RwLock::new(intaglio::SymbolTable::new()));
+lazy_static::lazy_static! {
+    static ref STRING_CACHE: RwLock<SymbolTable> = RwLock::new(SymbolTable::new());
+}
 
 pub fn intern_str(string: &str) -> Symbol {
     let cache = STRING_CACHE.upgradable_read();

@@ -1,8 +1,3 @@
-#![feature(
-    if_let_guard,                   // #51114 <https://github.com/rust-lang/rust/issues/51114>
-    let_chains,                     // #53667 <https://github.com/rust-lang/rust/issues/53667>
-    once_cell,                      // #74465 <https://github.com/rust-lang/rust/issues/74465>
-)]
 #![deny(
     clippy::semicolon_if_nothing_returned,
     clippy::debug_assert_with_mut_call,
@@ -31,6 +26,9 @@ pub mod ssa;
 pub mod parser;
 pub mod strings;
 pub mod types;
+
+#[cfg(test)]
+mod tests;
 
 pub type Span = logos::Span;
 
@@ -248,8 +246,8 @@ pub enum Primitive {
     UInt(usize),
     Bool(bool),
 
-    Tuple(Vec<(Option<Symbol>, Option<Box<Self>>)>),
-    Array(Vec<Box<Self>>),
+    Tuple(Vec<(Option<Symbol>, Option<Self>)>),
+    Array(Vec<Self>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -283,4 +281,11 @@ pub enum Operator {
 
     Assign,
     Flow,
+}
+
+#[macro_export]
+macro_rules! intern {
+    ($string:expr) => {{
+        $crate::strings::intern_str($string)
+    }};
 }
