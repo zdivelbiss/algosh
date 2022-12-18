@@ -40,6 +40,20 @@ pub enum Expression {
     },
 }
 
+impl Expression {
+    pub const fn is_tld(&self) -> bool {
+        matches!(
+            self,
+            Expression::TypeDef { name: _, ty: _ }
+                | Expression::VarDef {
+                    name: _,
+                    in_ty: _,
+                    expr: _
+                }
+        )
+    }
+}
+
 type Spanned<T> = (T, crate::Span);
 type AlgoParser<'a, T> = BoxedParser<'a, TokenKind, T, Error>;
 
