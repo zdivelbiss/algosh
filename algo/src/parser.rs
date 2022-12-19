@@ -41,7 +41,7 @@ pub enum Expression {
 }
 
 impl Expression {
-    pub const fn is_tld(&self) -> bool {
+    pub const fn is_def(&self) -> bool {
         matches!(
             self,
             Expression::TypeDef { name: _, ty: _ }
@@ -73,17 +73,18 @@ fn parse_aggregate<'a>() -> AlgoParser<'a, Vec<HeapExpr>> {
 }
 
 fn parse_vardef<'a>() -> AlgoParser<'a, SpannedExpr> {
+    let body = parse_tuple_type()
+        .then_ignore(just(TokenKind::Flow))
+        .or_not()
+        .then(parse_flow())
+        .delimited_by(just(TokenKind::BlockOpen), just(TokenKind::BlockClose))
+        .boxed();
+
     just(TokenKind::VarDef)
         .ignore_then(parse_symbol())
         .then_ignore(just(TokenKind::Assign))
-        .then(
-            parse_tuple_type()
-                .then_ignore(just(TokenKind::Flow))
-                .or_not(),
-        )
-        .then(parse_flow())
-        .then_ignore(just(TokenKind::Terminator))
-        .map_with_span(|((name, in_ty), expr), span| {
+        .then(body)
+        .map_with_span(|(name, (in_ty, expr)), span| {
             (
                 Expression::VarDef {
                     name,
@@ -124,7 +125,7 @@ fn parse_tuple_type<'a>() -> AlgoParser<'a, Type> {
             .then(choice((expr, parse_array_type(), parse_structural_type())))
             .separated_by(just(TokenKind::Separator))
             .at_least(1)
-            .delimited_by(just(TokenKind::TupleOpen), just(TokenKind::TupleClose))
+            .delimited_by(just(TokenKind::GroupOpen), just(TokenKind::GroupClose))
             .try_map(|components, span| {
                 // Checking naming uniformity here instead of parsing sensitively is probably
                 // technically slower, but this is much more readable.
@@ -201,7 +202,7 @@ fn parse_flow<'a>() -> AlgoParser<'a, SpannedExpr> {
 }
 
 fn parse_control<'a>() -> AlgoParser<'a, SpannedExpr> {
-    choice((parse_array(), parse_tuple()))
+    choice((parse_tuple(), parse_array()))
         .map_with_span(|prim, span| (Expression::Primitive(prim), span))
         .or(parse_expr())
         .separated_by(just(TokenKind::Terminator))
@@ -215,7 +216,7 @@ fn parse_control<'a>() -> AlgoParser<'a, SpannedExpr> {
 fn parse_expr<'a>() -> AlgoParser<'a, SpannedExpr> {
     recursive(|expr| {
         let atom = choice((
-            parse_primitive().map(Expression::Primitive),
+            parse_structural_primitive().map(Expression::Primitive),
             parse_symbol().map(Expression::Identifier),
         ))
         .map_with_span(|expr, span| (expr, span))
@@ -225,7 +226,7 @@ fn parse_expr<'a>() -> AlgoParser<'a, SpannedExpr> {
             TokenKind::GroupClose,
             [
                 (TokenKind::ArrayOpen, TokenKind::ArrayClose),
-                (TokenKind::TupleOpen, TokenKind::TupleClose),
+                (TokenKind::BlockOpen, TokenKind::BlockClose),
             ],
             |span| (Expression::Error, span),
         ))
@@ -234,13 +235,13 @@ fn parse_expr<'a>() -> AlgoParser<'a, SpannedExpr> {
             TokenKind::ArrayClose,
             [
                 (TokenKind::GroupOpen, TokenKind::GroupClose),
-                (TokenKind::TupleOpen, TokenKind::TupleClose),
+                (TokenKind::BlockOpen, TokenKind::BlockClose),
             ],
             |span| (Expression::Error, span),
         ))
         .recover_with(nested_delimiters(
-            TokenKind::TupleOpen,
-            TokenKind::TupleClose,
+            TokenKind::BlockOpen,
+            TokenKind::BlockClose,
             [
                 (TokenKind::GroupOpen, TokenKind::GroupClose),
                 (TokenKind::ArrayOpen, TokenKind::ArrayClose),
@@ -329,49 +330,28 @@ fn parse_expr<'a>() -> AlgoParser<'a, SpannedExpr> {
     .boxed()
 }
 
-fn parse_primitive() -> impl Parser<TokenKind, Primitive, Error = Error> + Clone {
-    choice((
-        parse_integer().map(Primitive::Int),
-        parse_uinteger().map(Primitive::UInt),
-        parse_bool().map(Primitive::Bool),
-    ))
-    .labelled("parse_primitive")
-}
-
-fn parse_integer() -> impl Parser<TokenKind, isize, Error = Error> + Clone {
-    select! { TokenKind::Integer(x) => x }.labelled("parse_integer")
-}
-
-fn parse_uinteger() -> impl Parser<TokenKind, usize, Error = Error> + Clone {
-    select! { TokenKind::UInteger(x) => x }.labelled("parse_uinteger")
-}
-
-fn parse_bool() -> impl Parser<TokenKind, bool, Error = Error> + Clone {
-    select! { TokenKind::Boolean(x) => x }.labelled("parse_bool")
-}
-
-fn parse_symbol() -> impl Parser<TokenKind, Symbol, Error = Error> + Clone {
-    select! { TokenKind::Symbol(name) => name }.labelled("parse_symbol")
-}
-
 fn parse_tuple<'a>() -> AlgoParser<'a, Primitive> {
-    parse_symbol()
-        .map(Some)
+    let primitive = parse_structural_primitive().map(|p| (None, Some(p)));
+
+    let symbol = parse_symbol()
         .then(
             just(TokenKind::Assign)
-                .ignore_then(parse_primitive())
+                .ignore_then(parse_structural_primitive())
                 .or_not(),
         )
+        .map(|(name, prim)| (Some(name), prim));
+
+    choice((symbol, primitive))
         .separated_by(just(TokenKind::Separator))
         .at_least(1)
-        .delimited_by(just(TokenKind::TupleOpen), just(TokenKind::TupleClose))
+        .delimited_by(just(TokenKind::GroupOpen), just(TokenKind::GroupClose))
         .map(Primitive::Tuple)
         .labelled("parse_tuple")
         .boxed()
 }
 
 fn parse_array<'a>() -> AlgoParser<'a, Primitive> {
-    parse_primitive()
+    parse_structural_primitive()
         .separated_by(just(TokenKind::Separator))
         .at_least(1)
         .delimited_by(just(TokenKind::ArrayOpen), just(TokenKind::ArrayClose))
@@ -380,18 +360,55 @@ fn parse_array<'a>() -> AlgoParser<'a, Primitive> {
         .boxed()
 }
 
+fn parse_structural_primitive() -> impl Parser<TokenKind, Primitive, Error = Error> {
+    choice((
+        parse_integer().map(Primitive::Int),
+        parse_uinteger().map(Primitive::UInt),
+        parse_bool().map(Primitive::Bool),
+    ))
+    .labelled("parse_primitive")
+}
+
+fn parse_integer() -> impl Parser<TokenKind, isize, Error = Error> {
+    select! { TokenKind::Integer(x) => x }.labelled("parse_integer")
+}
+
+fn parse_uinteger() -> impl Parser<TokenKind, usize, Error = Error> {
+    select! { TokenKind::UInteger(x) => x }.labelled("parse_uinteger")
+}
+
+fn parse_bool() -> impl Parser<TokenKind, bool, Error = Error> {
+    select! { TokenKind::Boolean(x) => x }.labelled("parse_bool")
+}
+
+fn parse_symbol() -> impl Parser<TokenKind, Symbol, Error = Error> {
+    select! { TokenKind::Symbol(name) => name }.labelled("parse_symbol")
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{intern, tests::parse_and_eq, Primitive};
 
     #[test]
-    fn parse_tuple() {
+    fn parse_named_tuple() {
         parse_and_eq(
-            "{ a: 1, b: false }",
+            "(a: 1, b: false)",
             super::parse_tuple(),
             &Primitive::Tuple(vec![
                 (Some(intern!("a")), Some(Primitive::Int(1))),
                 (Some(intern!("b")), Some(Primitive::Bool(false))),
+            ]),
+        )
+    }
+
+    #[test]
+    fn parse_tuple_ident_prim() {
+        parse_and_eq(
+            "(a, 1)",
+            super::parse_tuple(),
+            &Primitive::Tuple(vec![
+                (Some(intern!("a")), None),
+                (None, Some(Primitive::Int(1))),
             ]),
         )
     }

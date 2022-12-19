@@ -1,14 +1,42 @@
-use crate::{parser::HeapExpr, strings::Symbol, Primitive};
+use crate::{parser::HeapExpr, strings::Symbol, Error, Primitive};
 
-enum Linearal {
+
+pub enum Linearal {
     Primitive(Primitive),
     Variable(Symbol),
 
     Add(Box<Self>, Box<Self>),
 }
 
-fn linearize(ast: &mut Vec<HeapExpr>) -> Result<Vec<Linearal>, Error> {
-    let root_expr = ast.iter().
+pub fn linearize(ast: &mut Vec<HeapExpr>) -> Result<Vec<Linearal>, Vec<Error>> {
+    let root_expr = {
+        let p = |expr: &HeapExpr| !expr.0.is_def();
+
+        let mut iter = ast.iter();
+        let Some(root_expr_index) = iter.position(p) else { return Err(vec![Error::no_tld()]); };
+
+        let errs = iter
+            .filter(|e| p(e))
+            .map(|expr| {
+                Error::general(
+                    expr.1.clone(),
+                    "cannot have multiple top-level expressions",
+                    Some("linearize_root_expr"),
+                )
+            })
+            .collect::<Vec<Error>>();
+
+        if !errs.is_empty() {
+            return Err(errs);
+        }
+
+        ast.remove(root_expr_index)
+    };
+
+
+
+
+    Ok(Vec::new())
 }
 
-fn linearize_expr(expr: &HeapExpr) -> Linearal {}
+// fn linearize_expr(expr: &HeapExpr) -> Linearal {}

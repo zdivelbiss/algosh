@@ -16,9 +16,9 @@ pub enum TokenKind {
     #[token(")")]
     GroupClose,
     #[token("{")]
-    TupleOpen,
+    BlockOpen,
     #[token("}")]
-    TupleClose,
+    BlockClose,
     #[token("[")]
     ArrayOpen,
     #[token("]")]
@@ -101,7 +101,7 @@ pub enum TokenKind {
 
     #[error]
     #[regex(r"[\s]+", logos::skip)]
-    #[regex(r"//.*", logos::skip)]
+    #[regex(r"#.*", logos::skip)]
     Error,
 }
 
@@ -140,8 +140,8 @@ impl core::fmt::Display for TokenKind {
             TokenKind::Separator => ",",
             TokenKind::GroupOpen => "(",
             TokenKind::GroupClose => ")",
-            TokenKind::TupleOpen => "{",
-            TokenKind::TupleClose => "}",
+            TokenKind::BlockOpen => "{",
+            TokenKind::BlockClose => "}",
             TokenKind::ArrayOpen => "[",
             TokenKind::ArrayClose => "]",
             TokenKind::VarDef => "var",

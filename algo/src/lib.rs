@@ -54,6 +54,8 @@ pub enum ErrorKind {
     UndeclaredVar {
         var_name: String,
     },
+
+    NoTld,
 }
 
 #[derive(Debug, Clone)]
@@ -72,7 +74,7 @@ impl Error {
         }
     }
 
-    pub fn unexpected(
+    pub const fn unexpected(
         span: Span,
         expected: Vec<TokenKind>,
         found: Option<TokenKind>,
@@ -92,6 +94,14 @@ impl Error {
                 var_name: var_name.to_owned(),
             },
             label,
+        }
+    }
+
+    pub const fn no_tld() -> Self {
+        Self {
+            span: 0..0,
+            kind: ErrorKind::NoTld,
+            label: None,
         }
     }
 
@@ -177,7 +187,6 @@ impl Error {
                     "try inserting {} at the end of the {}",
                     expected.fg(Color::Green),
                     match delimiter {
-                        TokenKind::TupleOpen => "tuple declaration",
                         TokenKind::ArrayOpen => "array declaration",
                         TokenKind::GroupOpen => "grouping",
                         _ => "code block",
@@ -188,6 +197,10 @@ impl Error {
             ErrorKind::UndeclaredVar { var_name } => Report::build(ReportKind::Error, (), 8)
                 .with_message(format!("use of undeclared variable `{var_name}`"))
                 .with_label(Label::new(self.span().clone()))
+                .finish(),
+
+            ErrorKind::NoTld => Report::build(ReportKind::Error, (), 8)
+                .with_message("script has no top-level expression")
                 .finish(),
         }
     }

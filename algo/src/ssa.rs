@@ -5,8 +5,8 @@ use crate::{
 };
 use std::collections::BTreeMap;
 
-pub type Scope = BTreeMap<Symbol, Binding>;
-pub type Scopes = Vec<BTreeMap<Symbol, Binding>>;
+type Scope = BTreeMap<Symbol, Binding>;
+type Scopes = Vec<BTreeMap<Symbol, Binding>>;
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq)]

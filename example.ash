@@ -1,3 +1,9 @@
-// type Test: { Int, [[Bool, 32], 128], { [UInt] }};
+var add_one: { (a: Int) => a + 1 }
+var add_one_two: {
+    (a: Int, b: Int) =>
+    a: a + 1;
+    b: b + 1;
+    (a, b)
+}
 
-var add_one_foo: { a: Int, b: Int } => a + 1; b + 1; 1;
+1 => add_one => (a, 1) => add_one_two

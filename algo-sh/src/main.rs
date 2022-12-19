@@ -14,23 +14,40 @@ fn main() {
 
 fn parse_input(input: &str) -> Vec<algo::ssa::Instruction> {
     let tokens = algo::lexer::lex(input);
-    println!("{:?}", tokens);
-    match algo::parser::parse(tokens).and_then(|ast| {
-        println!("{:?}", ast);
-        algo::ssa::translate(ast.into_boxed_slice())
-    }) {
-        Ok((ssa, _)) => ssa,
+    let ast = algo::parser::parse(tokens);
+    // let linearize = algo::linearizer::linearize(&mut ast).unwrap();
+
+    match ast {
+        Ok(ast) => println!("{:#?}", ast),
 
         Err(errs) => {
-            use ariadne::*;
-
-            for err in errs.iter() {
+            for err in errs {
+                println!("{:?}", &err);
                 err.generate_report()
-                    .print(Source::from(input))
-                    .expect("failed to generate report for error");
+                    .eprint(ariadne::Source::from(input))
+                    .unwrap();
             }
-
-            std::process::exit(-1)
         }
     }
+
+    return Vec::new();
+
+    // match algo::parser::parse(tokens).and_then(|ast| {
+    //     println!("{:?}", ast);
+    //     algo::ssa::translate(ast.into_boxed_slice())
+    // }) {
+    //     Ok((ssa, _)) => ssa,
+
+    //     Err(errs) => {
+    //         use ariadne::*;
+
+    //         for err in errs.iter() {
+    //             err.generate_report()
+    //                 .print(Source::from(input))
+    //                 .expect("failed to generate report for error");
+    //         }
+
+    //         std::process::exit(-1)
+    //     }
+    // }
 }
