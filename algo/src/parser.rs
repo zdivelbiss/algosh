@@ -13,6 +13,9 @@ pub enum Expression {
     Primitive(Primitive),
     Identifier(Symbol),
 
+    Array(Vec<SpannedExpr>),
+    Tuple(Vec<SpannedExpr>),
+
     Binary {
         lhs: HeapExpr,
         op: Operator,
@@ -77,13 +80,15 @@ fn parse_vardef<'a>() -> AlgoParser<'a, SpannedExpr> {
         .then_ignore(just(TokenKind::Flow))
         .or_not()
         .then(parse_flow())
-        .delimited_by(just(TokenKind::BlockOpen), just(TokenKind::BlockClose))
         .boxed();
+
+    let body_terminated = body.clone().then_ignore(just(TokenKind::Terminator));
+    let body_delimited = body.delimited_by(just(TokenKind::BlockOpen), just(TokenKind::BlockClose));
 
     just(TokenKind::VarDef)
         .ignore_then(parse_symbol())
         .then_ignore(just(TokenKind::Assign))
-        .then(body)
+        .then(choice((body_terminated, body_delimited)))
         .map_with_span(|(name, (in_ty, expr)), span| {
             (
                 Expression::VarDef {
@@ -202,11 +207,18 @@ fn parse_flow<'a>() -> AlgoParser<'a, SpannedExpr> {
 }
 
 fn parse_control<'a>() -> AlgoParser<'a, SpannedExpr> {
-    choice((parse_tuple(), parse_array()))
-        .map_with_span(|prim, span| (Expression::Primitive(prim), span))
-        .or(parse_expr())
+    let control = choice((parse_tuple(), parse_array()))
+        .map_with_span(|expr, span| (expr, span))
+        .or(parse_expr());
+
+    let control_block = control
+        .clone()
         .separated_by(just(TokenKind::Terminator))
-        .at_least(1)
+        .at_least(2)
+        .delimited_by(just(TokenKind::BlockOpen), just(TokenKind::BlockClose));
+
+    control_block
+        .or(control.map(|expr| vec![expr]))
         .map_with_span(|exprs, span| (Expression::Control { exprs }, span))
         .labelled("parse_control")
         .boxed()
@@ -273,7 +285,6 @@ fn parse_expr<'a>() -> AlgoParser<'a, SpannedExpr> {
         }
 
         let assign = parse_op(select! { TokenKind::Assign => Operator::Assign }, atom);
-        let flow = parse_op(select! { TokenKind::Flow => Operator::Flow }, assign);
         let condition = parse_op(
             select! {
                 TokenKind::Eq => Operator::Eq,
@@ -286,7 +297,7 @@ fn parse_expr<'a>() -> AlgoParser<'a, SpannedExpr> {
                 TokenKind::Xor => Operator::Xor,
                 TokenKind::And => Operator::And,
             },
-            flow,
+            assign,
         );
         let exponent = parse_op(select! { TokenKind::Exp => Operator::Exp }, condition);
         let mul_div_rem = parse_op(
@@ -330,32 +341,22 @@ fn parse_expr<'a>() -> AlgoParser<'a, SpannedExpr> {
     .boxed()
 }
 
-fn parse_tuple<'a>() -> AlgoParser<'a, Primitive> {
-    let primitive = parse_structural_primitive().map(|p| (None, Some(p)));
-
-    let symbol = parse_symbol()
-        .then(
-            just(TokenKind::Assign)
-                .ignore_then(parse_structural_primitive())
-                .or_not(),
-        )
-        .map(|(name, prim)| (Some(name), prim));
-
-    choice((symbol, primitive))
+fn parse_tuple<'a>() -> AlgoParser<'a, Expression> {
+    parse_expr()
         .separated_by(just(TokenKind::Separator))
         .at_least(1)
         .delimited_by(just(TokenKind::GroupOpen), just(TokenKind::GroupClose))
-        .map(Primitive::Tuple)
+        .map(Expression::Tuple)
         .labelled("parse_tuple")
         .boxed()
 }
 
-fn parse_array<'a>() -> AlgoParser<'a, Primitive> {
-    parse_structural_primitive()
+fn parse_array<'a>() -> AlgoParser<'a, Expression> {
+    parse_expr()
         .separated_by(just(TokenKind::Separator))
         .at_least(1)
         .delimited_by(just(TokenKind::ArrayOpen), just(TokenKind::ArrayClose))
-        .map(Primitive::Array)
+        .map(Expression::Array)
         .labelled("parse_array")
         .boxed()
 }
@@ -387,28 +388,32 @@ fn parse_symbol() -> impl Parser<TokenKind, Symbol, Error = Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{intern, tests::parse_and_eq, Primitive};
+    use crate::{intern, tests::parse_and_eq, Operator, Primitive};
+
+    use super::Expression;
 
     #[test]
     fn parse_named_tuple() {
         parse_and_eq(
             "(a: 1, b: false)",
             super::parse_tuple(),
-            &Primitive::Tuple(vec![
-                (Some(intern!("a")), Some(Primitive::Int(1))),
-                (Some(intern!("b")), Some(Primitive::Bool(false))),
-            ]),
-        )
-    }
-
-    #[test]
-    fn parse_tuple_ident_prim() {
-        parse_and_eq(
-            "(a, 1)",
-            super::parse_tuple(),
-            &Primitive::Tuple(vec![
-                (Some(intern!("a")), None),
-                (None, Some(Primitive::Int(1))),
+            &super::Expression::Tuple(vec![
+                (
+                    Expression::Binary {
+                        lhs: Box::new((Expression::Identifier(intern!("a")), 1..2)),
+                        op: Operator::Assign,
+                        rhs: Box::new((Expression::Primitive(Primitive::Int(1)), 4..5)),
+                    },
+                    1..5,
+                ),
+                (
+                    Expression::Binary {
+                        lhs: Box::new((Expression::Identifier(intern!("b")), 7..8)),
+                        op: Operator::Assign,
+                        rhs: Box::new((Expression::Primitive(Primitive::Bool(false)), 10..15)),
+                    },
+                    7..15,
+                ),
             ]),
         )
     }

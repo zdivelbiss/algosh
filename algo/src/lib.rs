@@ -19,7 +19,6 @@
 )]
 
 use ariadne::Report;
-use intaglio::Symbol;
 use lexer::TokenKind;
 
 pub mod lexer;
@@ -264,9 +263,6 @@ pub enum Primitive {
     Int(isize),
     UInt(usize),
     Bool(bool),
-
-    Tuple(Vec<(Option<Symbol>, Option<Self>)>),
-    Array(Vec<Self>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
