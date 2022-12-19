@@ -1,6 +1,5 @@
-use crate::strings::Symbol;
-
 ///! Module defining everything related to the Algo type system.
+use crate::strings::Symbol;
 
 #[derive(Debug, PartialEq)]
 pub enum Type {

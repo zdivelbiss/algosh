@@ -6,6 +6,11 @@ pub enum TokenKind {
     #[regex(r"#\[.+\]", |lex| lex.slice().parse())]
     Preprocess(String),
 
+    #[token("this")]
+    This,
+    #[token("::")]
+    Path,
+
     #[token(";")]
     Terminator,
     #[token(",")]
