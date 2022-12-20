@@ -83,6 +83,10 @@ pub enum TokenKind {
     Xor,
     #[token("&&")]
     And,
+    #[token("?>")]
+    Clow,
+    #[token("??")]
+    Cerm,
     #[token(":")]
     Assign,
     #[token("=>")]

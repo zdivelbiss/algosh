@@ -29,7 +29,7 @@ pub enum Expression {
 
     VarDef {
         name: Symbol,
-        in_ty: Option<Type>,
+        in_ty: Type,
         expr: HeapExpr,
     },
 
@@ -78,7 +78,6 @@ fn parse_aggregate<'a>() -> AlgoParser<'a, Vec<HeapExpr>> {
 fn parse_vardef<'a>() -> AlgoParser<'a, SpannedExpr> {
     let body = parse_tuple_type()
         .then_ignore(just(TokenKind::Flow))
-        .or_not()
         .then(parse_flow())
         .boxed();
 
@@ -126,27 +125,11 @@ fn parse_tuple_type<'a>() -> AlgoParser<'a, Type> {
     recursive(|expr| {
         parse_symbol()
             .then_ignore(just(TokenKind::Assign))
-            .or_not()
             .then(choice((expr, parse_array_type(), parse_structural_type())))
             .separated_by(just(TokenKind::Separator))
             .at_least(1)
             .delimited_by(just(TokenKind::GroupOpen), just(TokenKind::GroupClose))
-            .try_map(|components, span| {
-                // Checking naming uniformity here instead of parsing sensitively is probably
-                // technically slower, but this is much more readable.
-                let is_valid_named = components.iter().all(|(n, _)| n.is_some());
-                let is_valid_unnamed = components.iter().all(|(n, _)| n.is_none());
-
-                if is_valid_named || is_valid_unnamed {
-                    Ok(Type::Tuple(components))
-                } else {
-                    Err(Error::general(
-                        span,
-                        "tuples must either be fully named or fully unnamed",
-                        None,
-                    ))
-                }
-            })
+            .map(Type::Tuple)
     })
     .labelled("parse_tuple_type")
     .boxed()
@@ -285,6 +268,13 @@ fn parse_expr<'a>() -> AlgoParser<'a, SpannedExpr> {
         }
 
         let assign = parse_op(select! { TokenKind::Assign => Operator::Assign }, atom);
+        let conditional_flow = parse_op(
+            select! {
+                TokenKind::Clow => Operator::Clow,
+                TokenKind::Cerm => Operator::Cerm,
+            },
+            assign,
+        );
         let condition = parse_op(
             select! {
                 TokenKind::Eq => Operator::Eq,
@@ -297,7 +287,7 @@ fn parse_expr<'a>() -> AlgoParser<'a, SpannedExpr> {
                 TokenKind::Xor => Operator::Xor,
                 TokenKind::And => Operator::And,
             },
-            assign,
+            conditional_flow,
         );
         let exponent = parse_op(select! { TokenKind::Exp => Operator::Exp }, condition);
         let mul_div_rem = parse_op(
@@ -388,19 +378,42 @@ fn parse_symbol() -> impl Parser<TokenKind, Symbol, Error = Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{intern, tests::parse_and_eq, Operator, Primitive};
+    use crate::{interned, tests::parse_and_eq, Operator, Primitive};
 
     use super::Expression;
 
     #[test]
-    fn parse_named_tuple() {
+    fn conditional() {
+        parse_and_eq(
+            "(false ?> 1) ?? 3",
+            super::parse_expr(),
+            &(
+                Expression::Binary {
+                    lhs: Box::new((
+                        Expression::Binary {
+                            lhs: Box::new((Expression::Primitive(Primitive::Bool(false)), 1..6)),
+                            op: Operator::Clow,
+                            rhs: Box::new((Expression::Primitive(Primitive::Int(1)), 10..11)),
+                        },
+                        1..11,
+                    )),
+                    op: Operator::Cerm,
+                    rhs: Box::new((Expression::Primitive(Primitive::Int(3)), 16..17)),
+                },
+                1..17,
+            ),
+        );
+    }
+
+    #[test]
+    fn named_tuple() {
         parse_and_eq(
             "(a: 1, b: false)",
             super::parse_tuple(),
             &super::Expression::Tuple(vec![
                 (
                     Expression::Binary {
-                        lhs: Box::new((Expression::Identifier(intern!("a")), 1..2)),
+                        lhs: Box::new((Expression::Identifier(interned!("a")), 1..2)),
                         op: Operator::Assign,
                         rhs: Box::new((Expression::Primitive(Primitive::Int(1)), 4..5)),
                     },
@@ -408,7 +421,7 @@ mod tests {
                 ),
                 (
                     Expression::Binary {
-                        lhs: Box::new((Expression::Identifier(intern!("b")), 7..8)),
+                        lhs: Box::new((Expression::Identifier(interned!("b")), 7..8)),
                         op: Operator::Assign,
                         rhs: Box::new((Expression::Primitive(Primitive::Bool(false)), 10..15)),
                     },

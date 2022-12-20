@@ -292,12 +292,15 @@ pub enum Operator {
     Xor,
     And,
 
+    Clow,
+    Cerm,
+
     Assign,
     Flow,
 }
 
 #[macro_export]
-macro_rules! intern {
+macro_rules! interned {
     ($string:expr) => {{
         $crate::strings::intern_str($string)
     }};
