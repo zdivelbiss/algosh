@@ -95,47 +95,56 @@ fn bind_expr(
     scope: &mut Scope,
     defs: &mut Defs,
 ) -> Result<Binding, Error> {
-    match &expr.0 {
-        Expression::Binary { lhs, op, rhs } => {
-            // TODO uninitialized variable error
-            let lhs_binding = bind_expr(lhs.as_ref(), nodes, scope, defs)?;
-            let rhs_binding = bind_expr(rhs.as_ref(), nodes, scope, defs)?;
+    // mark scope start
+    let scope_mark = scope.len();
 
-            match op {
-                Operator::Add => Ok(bind_push(nodes, Node::Add(lhs_binding, rhs_binding))),
-                Operator::Sub => Ok(bind_push(nodes, Node::Sub(lhs_binding, rhs_binding))),
+    let result = {
+        match &expr.0 {
+            Expression::Binary { lhs, op, rhs } => {
+                // TODO uninitialized variable error
+                let lhs_binding = bind_expr(lhs.as_ref(), nodes, scope, defs)?;
+                let rhs_binding = bind_expr(rhs.as_ref(), nodes, scope, defs)?;
 
-                _ => unimplemented!(),
+                match op {
+                    Operator::Add => Ok(bind_push(nodes, Node::Add(lhs_binding, rhs_binding))),
+                    Operator::Sub => Ok(bind_push(nodes, Node::Sub(lhs_binding, rhs_binding))),
+
+                    _ => unimplemented!(),
+                }
             }
+
+            Expression::Primitive(primitive) => Ok(bind_push(nodes, Node::Bind(primitive.clone()))),
+
+            Expression::Identifier(symbol) => match find_binding(symbol, scope) {
+                Some(binding) => Ok(binding),
+                None => bind_def(symbol, nodes, defs),
+            },
+
+            Expression::Flow {
+                from: expr,
+                to: next,
+            } => {
+                let bind_from = bind_expr(expr.as_ref(), nodes, scope, defs)?;
+                let bind_to = next
+                    .as_ref()
+                    .map(|expr| bind_expr(expr.as_ref(), nodes, scope, defs));
+
+                bind_to.unwrap_or(Ok(bind_from))
+            }
+
+            Expression::Control { exprs } => exprs
+                .iter()
+                .map(|expr| bind_expr(expr, nodes, scope, defs))
+                .last()
+                .unwrap(),
+
+            expr => unimplemented!("no SSA path: {:?}", expr),
         }
+    };
+    // return to scope start
+    scope.drain(scope_mark..);
 
-        Expression::Primitive(primitive) => Ok(bind_push(nodes, Node::Bind(primitive.clone()))),
-
-        Expression::Identifier(symbol) => match find_binding(symbol, scope) {
-            Some(binding) => Ok(binding),
-            None => bind_def(symbol, nodes, defs),
-        },
-
-        Expression::Flow {
-            from: expr,
-            to: next,
-        } => {
-            let bind_from = bind_expr(expr.as_ref(), nodes, scope, defs)?;
-            let bind_to = next
-                .as_ref()
-                .map(|expr| bind_expr(expr.as_ref(), nodes, scope, defs));
-
-            bind_to.unwrap_or(Ok(bind_from))
-        }
-
-        Expression::Control { exprs } => exprs
-            .iter()
-            .map(|expr| bind_expr(expr, nodes, scope, defs))
-            .last()
-            .unwrap(),
-
-        expr => unimplemented!("no SSA path: {:?}", expr),
-    }
+    result
 }
 
 fn bind_def(name: &Symbol, nodes: &mut Vec<Node>, defs: &mut Defs) -> Result<Binding, Error> {
