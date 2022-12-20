@@ -73,13 +73,6 @@ pub fn translate(ast: Vec<HeapExpr>) -> Result<Nodes, Vec<Error>> {
     }
 }
 
-fn bind_push(nodes: &mut Nodes, new_node: Node) -> Binding {
-    let binding = Binding::generate();
-    assert!(nodes.insert(binding, new_node).is_none());
-
-    binding
-}
-
 fn bind_expr(
     expr: &SpannedExpr,
     nodes: &mut Nodes,
@@ -97,14 +90,23 @@ fn bind_expr(
                 let rhs_binding = bind_expr(rhs.as_ref(), nodes, scope, defs)?;
 
                 match op {
-                    Operator::Add => Ok(bind_push(nodes, Node::Add(lhs_binding, rhs_binding))),
-                    Operator::Sub => Ok(bind_push(nodes, Node::Sub(lhs_binding, rhs_binding))),
+                    Operator::Add => Ok({
+                        let new_node = Node::Add(lhs_binding, rhs_binding);
+                        nodes.bind_push(new_node)
+                    }),
+                    Operator::Sub => Ok({
+                        let new_node = Node::Sub(lhs_binding, rhs_binding);
+                        nodes.bind_push(new_node)
+                    }),
 
                     _ => unimplemented!(),
                 }
             }
 
-            Expression::Primitive(primitive) => Ok(bind_push(nodes, Node::Bind(primitive.clone()))),
+            Expression::Primitive(primitive) => Ok({
+                let new_node = Node::Bind(primitive.clone());
+                nodes.bind_push(new_node)
+            }),
 
             Expression::Identifier(symbol) => match find_binding(symbol, scope) {
                 Some(binding) => Ok(binding),
@@ -150,12 +152,19 @@ fn bind_def(name: &Symbol, nodes: &mut Nodes, defs: &mut Defs) -> Result<Binding
 
     let mut def_scope = Scope::new();
     let params = match ty {
-        Type::Unit => bind_push(nodes, Node::Parameter(Type::Unit)),
+        Type::Unit => {
+            let new_node = Node::Parameter(Type::Unit);
+            nodes.bind_push(new_node)
+        }
         Type::Tuple(params) => params
             .into_iter()
             .map(|(name, ty)| {
-                let param_bind = bind_push(nodes, Node::Parameter(ty));
-                def_scope.push((name, param_bind));
+                let param_bind = {
+                    let new_node = Node::Parameter(ty);
+                    nodes.bind_push(new_node)
+                };
+                def_scope.push((name, param_bind.clone()));
+
                 param_bind
             })
             .last()
@@ -165,13 +174,16 @@ fn bind_def(name: &Symbol, nodes: &mut Nodes, defs: &mut Defs) -> Result<Binding
     };
 
     bind_expr(&expr, nodes, &mut def_scope, defs)?;
-    Ok(bind_push(nodes, Node::Expression(params, def_scope)))
+    Ok({
+        let new_node = Node::Expression(params, def_scope);
+        nodes.bind_push(new_node)
+    })
 }
 
 fn find_binding(symbol: &Symbol, scopes: &mut Scope) -> Option<Binding> {
     scopes.iter().rev().find_map(|(other, binding)| {
         if symbol.eq(other) {
-            Some(*binding)
+            Some(binding.clone())
         } else {
             None
         }

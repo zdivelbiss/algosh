@@ -1,17 +1,24 @@
 use crate::ssa::Nodes;
 
+use super::Node;
+
 pub fn optimize(nodes: &mut Nodes) {
     simplify(nodes);
 }
 
-// fn simplify(nodes: &mut Nodes) {
-//     let mut index = 0;
-//     while index < nodes.len() {
-//         let (prev, cur) = nodes.split_at_mut(index);
-//         let cur = &mut cur[0];
+fn simplify(nodes: &mut Nodes) {
+    let mut index = 0;
+    while let Some(cur) = nodes.get(index) {
+        match &*cur {
+            Node::Add(lhs, rhs) => {
+                if let (Some(Node::Bind(lhs)), Some(Node::Bind(rhs))) =
+                    (nodes.get(lhs).as_deref(), nodes.get(rhs).as_deref())
+                {
+                    if let Some(sum) = lhs
+                }
+            }
+        }
 
-//         cur.simplify(prev);
-
-//         index += 1;
-//     }
-// }
+        index += 1;
+    }
+}

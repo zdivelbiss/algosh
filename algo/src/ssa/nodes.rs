@@ -1,9 +1,9 @@
-use std::collections::BTreeMap;
+use std::{cell::UnsafeCell, collections::BTreeMap};
 
 use crate::{ssa::Scope, types::Type, Primitive};
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Binding(usize);
 
 impl Binding {
@@ -22,7 +22,28 @@ impl Binding {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+pub enum NodeIndexer {
+    Binding(Binding),
+    Index(usize),
+}
+
+pub trait NodeIndex {
+    fn into_indexer(self) -> NodeIndexer;
+}
+
+impl NodeIndex for &Binding {
+    fn into_indexer(self) -> NodeIndexer {
+        NodeIndexer::Binding(self)
+    }
+}
+
+impl NodeIndex for usize {
+    fn into_indexer(self) -> NodeIndexer {
+        NodeIndexer::Index(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Node {
     Bind(Primitive),
     Add(Binding, Binding),
@@ -62,4 +83,61 @@ impl Node {
     }
 }
 
-pub type Nodes = BTreeMap<Binding, Node>;
+pub struct Nodes {
+    cache: BTreeMap<Binding, UnsafeCell<Node>>,
+    composition: Vec<Binding>,
+}
+
+impl Nodes {
+    pub const fn new() -> Self {
+        Self {
+            cache: BTreeMap::new(),
+            composition: Vec::new(),
+        }
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.composition.len()
+    }
+
+    pub fn bind_push(&mut self, node: Node) -> Binding {
+        let binding = Binding::generate();
+        assert!(self
+            .cache
+            .insert(binding.clone(), UnsafeCell::new(node))
+            .is_none());
+        self.composition.push(binding.clone());
+
+        binding
+    }
+
+    pub fn get<Idx: NodeIndex>(&self, index: Idx) -> Option<NodeRef> {
+        let binding = match index.into_indexer() {
+            NodeIndexer::Binding(binding) => binding,
+            NodeIndexer::Index(index) => self.composition.get(index)?.clone(),
+        };
+
+        self.cache.get(&binding).map(NodeRef)
+    }
+}
+
+pub struct NodeRef<'a>(&'a UnsafeCell<Node>);
+
+impl core::ops::Deref for NodeRef<'_> {
+    type Target = Node;
+
+    fn deref(&self) -> &Self::Target {
+        // Safety: Requirements are met by the invariants of `UnsafeCell` itself.
+        unsafe { self.0.get().as_ref() }.unwrap()
+        // Additionally, the lifetime requirements are guaranteed by the `&self` borrow.
+    }
+}
+
+impl core::ops::DerefMut for NodeRef<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // Safety: Requirements are met by the invariants of `UnsafeCell` itself.
+        unsafe { self.0.get().as_mut() }.unwrap()
+        // Additionally, the lifetime requirements are guaranteed by the `&mut self` borrow.
+    }
+}

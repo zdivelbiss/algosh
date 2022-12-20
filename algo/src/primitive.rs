@@ -1,6 +1,6 @@
 use std::ops;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Primitive {
     Unit,
     Int(isize),

@@ -1,7 +1,7 @@
 ///! Module defining everything related to the Algo type system.
 use crate::strings::Symbol;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     Unit, // is `()`
     Int,  // is `isize`
