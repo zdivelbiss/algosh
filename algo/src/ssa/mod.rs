@@ -1,3 +1,6 @@
+mod optimizer;
+pub use optimizer::*;
+
 use crate::{
     parser::{Expression, HeapExpr, SpannedExpr},
     strings::Symbol,
@@ -13,6 +16,13 @@ type Defs = BTreeMap<Symbol, (Type, SpannedExpr)>;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Binding(usize);
 
+impl Binding {
+    #[inline]
+    pub const fn as_usize(&self) -> usize {
+        self.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Node {
     Bind(Primitive),
@@ -21,7 +31,7 @@ pub enum Node {
     Jump(Binding),
 
     Parameter(Type),
-    Expression { params: Binding, scope: Scope },
+    Expression(Binding, Scope),
     Call(Binding),
 }
 
@@ -70,14 +80,18 @@ fn stratify_exprs(ast: Vec<HeapExpr>) -> Result<(SpannedExpr, Defs), Vec<Error>>
     Ok((tle, defs))
 }
 
-pub fn translate(ast: Vec<HeapExpr>) -> Result<(Vec<Node>, Scope), Vec<Error>> {
+pub fn translate(ast: Vec<HeapExpr>) -> Result<Nodes, Vec<Error>> {
     let (tle, mut defs) = stratify_exprs(ast)?;
 
     let mut nodes = Vec::new();
     let mut scope = Scope::new();
 
     match bind_expr(&tle, &mut nodes, &mut scope, &mut defs) {
-        Ok(_) => Ok((nodes, scope)),
+        Ok(_) => {
+            nodes.shrink_to_fit();
+            Ok(Nodes(nodes))
+        }
+
         Err(err) => Err(vec![err]),
     }
 }
@@ -174,13 +188,7 @@ fn bind_def(name: &Symbol, nodes: &mut Vec<Node>, defs: &mut Defs) -> Result<Bin
     };
 
     bind_expr(&expr, nodes, &mut def_scope, defs)?;
-    Ok(bind_push(
-        nodes,
-        Node::Expression {
-            params,
-            scope: def_scope,
-        },
-    ))
+    Ok(bind_push(nodes, Node::Expression(params, def_scope)))
 }
 
 fn find_binding(symbol: &Symbol, scopes: &mut Scope) -> Option<Binding> {
@@ -191,6 +199,42 @@ fn find_binding(symbol: &Symbol, scopes: &mut Scope) -> Option<Binding> {
             None
         }
     })
+}
+
+pub struct Nodes(Vec<Node>);
+
+impl From<Binding> for usize {
+    fn from(value: Binding) -> Self {
+        value.0
+    }
+}
+
+impl core::ops::Deref for Nodes {
+    type Target = Vec<Node>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl core::ops::DerefMut for Nodes {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T: Into<usize>> core::ops::Index<T> for Nodes {
+    type Output = Node;
+
+    fn index(&self, index: T) -> &Self::Output {
+        &self.0[index.into()]
+    }
+}
+
+impl<T: Into<usize>> core::ops::IndexMut<T> for Nodes {
+    fn index_mut(&mut self, index: T) -> &mut Self::Output {
+        &mut self.0[index.into()]
+    }
 }
 
 #[cfg(test)]
@@ -220,10 +264,7 @@ mod tests {
                 Node::Parameter(Type::Int),
                 Node::Bind(crate::Primitive::Int(1)),
                 Node::Add(Binding(0), Binding(1)),
-                Node::Expression {
-                    params: Binding(0),
-                    scope: vec![(interned!("a"), Binding(0))]
-                }
+                Node::Expression(Binding(0), vec![(interned!("a"), Binding(0))])
             ]
         );
     }

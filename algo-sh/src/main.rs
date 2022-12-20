@@ -12,13 +12,15 @@ fn main() {
     parse_input(buf.as_str());
 }
 
-fn parse_input(input: &str) -> Vec<algo::ssa::Node> {
+fn parse_input(input: &str) -> algo::ssa::Nodes {
     let tokens = algo::lexer::lex(input);
     let ast = algo::parser::parse(tokens).unwrap_or_else(|errs| handle_errors(input, errs));
-    let a = algo::ssa::translate(ast).unwrap_or_else(|errs| handle_errors(input, errs));
-    println!("{:?}", a);
+    let nodes = algo::ssa::translate(ast).unwrap_or_else(|errs| handle_errors(input, errs));
 
-    a.0
+    use algo::ssa::Node;
+
+
+    nodes
 }
 
 fn handle_errors(src: &str, errs: Vec<algo::Error>) -> ! {

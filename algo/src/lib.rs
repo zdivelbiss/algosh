@@ -21,6 +21,9 @@
 use ariadne::Report;
 use lexer::TokenKind;
 
+mod primitive;
+pub use primitive::*;
+
 pub mod lexer;
 pub mod parser;
 pub mod ssa;
@@ -253,14 +256,6 @@ impl chumsky::Error<TokenKind> for Error {
         // FIXME: Actually merge the errors?
         self
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Primitive {
-    Unit,
-    Int(isize),
-    UInt(usize),
-    Bool(bool),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
