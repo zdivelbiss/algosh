@@ -26,13 +26,9 @@ fn stratify_exprs(ast: Vec<HeapExpr>) -> Result<(SpannedExpr, Defs), Vec<Error>>
                         assert!(defs.insert(name, (in_ty, *expr)).is_none());
                     }
 
-                    expr => {
-                        if !expr.is_def() {
-                            tles.push((expr, span))
-                        } else {
-                            panic!("failed to stratify all def expressions")
-                        }
-                    }
+                    expr if !expr.is_def() => tles.push((expr, span)),
+
+                    _ => panic!("failed to stratify all def expressions"),
                 }
 
                 (defs, tles)
@@ -47,7 +43,7 @@ fn stratify_exprs(ast: Vec<HeapExpr>) -> Result<(SpannedExpr, Defs), Vec<Error>>
                 return Err(tles_iter
                     .map(|(_, span)| {
                         Error::general(
-                            span.clone(),
+                            span,
                             "cannot have multiple top-level expressions",
                             Some("parse_input.tle_check"),
                         )
@@ -104,13 +100,13 @@ fn bind_expr(
             }
 
             Expression::Primitive(primitive) => Ok({
-                let new_node = Node::Bind(primitive.clone());
+                let new_node = Node::Bind(*primitive);
                 nodes.bind_push(new_node)
             }),
 
-            Expression::Identifier(symbol) => match find_binding(symbol, scope) {
+            Expression::Identifier(symbol) => match find_binding(*symbol, scope) {
                 Some(binding) => Ok(binding),
-                None => bind_def(symbol, nodes, defs),
+                None => bind_def(*symbol, nodes, defs),
             },
 
             Expression::Flow {
@@ -140,12 +136,12 @@ fn bind_expr(
     result
 }
 
-fn bind_def(name: &Symbol, nodes: &mut Nodes, defs: &mut Defs) -> Result<Binding, Error> {
-    let Some((ty, expr)) = defs.remove(name)
+fn bind_def(name: Symbol, nodes: &mut Nodes, defs: &mut Defs) -> Result<Binding, Error> {
+    let Some((ty, expr)) = defs.remove(&name)
                     else {
                         return Err(Error::undeclared_var(
                             0..0, // TODO
-                            crate::strings::get_intern_str(*name).as_str(),
+                            crate::strings::get_intern_str(name).as_str(),
                             Some("ssa_identifier"),
                         ));
                     };
@@ -180,7 +176,7 @@ fn bind_def(name: &Symbol, nodes: &mut Nodes, defs: &mut Defs) -> Result<Binding
     })
 }
 
-fn find_binding(symbol: &Symbol, scopes: &mut Scope) -> Option<Binding> {
+fn find_binding(symbol: Symbol, scopes: &mut Scope) -> Option<Binding> {
     scopes.iter().rev().find_map(|(other, binding)| {
         if symbol.eq(other) {
             Some(binding.clone())

@@ -1,4 +1,4 @@
-use std::{cell::UnsafeCell, collections::BTreeMap};
+use std::{cell::RefCell, collections::BTreeMap};
 
 use crate::{ssa::Scope, types::Type, Primitive};
 
@@ -11,15 +11,6 @@ impl Binding {
     pub fn generate() -> Self {
         Self(fastrand::usize(..))
     }
-
-    pub fn from_raw(value: usize) -> Self {
-        Self(value)
-    }
-
-    #[inline]
-    pub const fn as_usize(&self) -> usize {
-        self.0
-    }
 }
 
 pub enum NodeIndexer {
@@ -31,7 +22,7 @@ pub trait NodeIndex {
     fn into_indexer(self) -> NodeIndexer;
 }
 
-impl NodeIndex for &Binding {
+impl NodeIndex for Binding {
     fn into_indexer(self) -> NodeIndexer {
         NodeIndexer::Binding(self)
     }
@@ -56,12 +47,13 @@ pub enum Node {
 }
 
 impl Node {
-    pub fn simplify(&mut self, prev_nodes: &[Node]) {
+    pub fn simplify(&mut self, nodes: &Nodes) {
         match self {
             Self::Add(lhs, rhs) => {
-                if let (Self::Bind(lhs), Self::Bind(rhs)) =
-                    (&prev_nodes[lhs.as_usize()], &prev_nodes[rhs.as_usize()])
-                {
+                if let (Some(Self::Bind(lhs)), Some(Self::Bind(rhs))) = (
+                    nodes.get(lhs.clone()).as_deref(),
+                    nodes.get(rhs.clone()).as_deref(),
+                ) {
                     if let Some(sum) = *lhs + *rhs {
                         *self = Node::Bind(sum);
                     }
@@ -69,9 +61,10 @@ impl Node {
             }
 
             Self::Sub(lhs, rhs) => {
-                if let (Self::Bind(lhs), Self::Bind(rhs)) =
-                    (&prev_nodes[lhs.as_usize()], &prev_nodes[rhs.as_usize()])
-                {
+                if let (Some(Self::Bind(lhs)), Some(Self::Bind(rhs))) = (
+                    nodes.get(lhs.clone()).as_deref(),
+                    nodes.get(rhs.clone()).as_deref(),
+                ) {
                     if let Some(sum) = *lhs - *rhs {
                         *self = Node::Bind(sum);
                     }
@@ -84,7 +77,7 @@ impl Node {
 }
 
 pub struct Nodes {
-    cache: BTreeMap<Binding, UnsafeCell<Node>>,
+    cache: BTreeMap<Binding, RefCell<Node>>,
     composition: Vec<Binding>,
 }
 
@@ -101,43 +94,50 @@ impl Nodes {
         self.composition.len()
     }
 
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.composition.is_empty()
+    }
+
     pub fn bind_push(&mut self, node: Node) -> Binding {
         let binding = Binding::generate();
         assert!(self
             .cache
-            .insert(binding.clone(), UnsafeCell::new(node))
+            .insert(binding.clone(), RefCell::new(node))
             .is_none());
         self.composition.push(binding.clone());
 
         binding
     }
 
-    pub fn get<Idx: NodeIndex>(&self, index: Idx) -> Option<NodeRef> {
-        let binding = match index.into_indexer() {
-            NodeIndexer::Binding(binding) => binding,
-            NodeIndexer::Index(index) => self.composition.get(index)?.clone(),
-        };
+    fn binding_index<Idx: NodeIndex>(&self, index: Idx) -> Option<Binding> {
+        match index.into_indexer() {
+            NodeIndexer::Binding(binding) => Some(binding),
+            NodeIndexer::Index(index) => self.composition.get(index).map(Binding::clone),
+        }
+    }
 
-        self.cache.get(&binding).map(NodeRef)
+    pub fn get<Idx: NodeIndex>(&self, index: Idx) -> Option<core::cell::Ref<Node>> {
+        self.cache
+            .get(&self.binding_index(index)?)
+            .map(RefCell::borrow)
+    }
+
+    pub fn get_mut<Idx: NodeIndex>(&self, index: Idx) -> Option<core::cell::RefMut<Node>> {
+        self.cache
+            .get(&self.binding_index(index)?)
+            .map(RefCell::borrow_mut)
     }
 }
 
-pub struct NodeRef<'a>(&'a UnsafeCell<Node>);
-
-impl core::ops::Deref for NodeRef<'_> {
-    type Target = Node;
-
-    fn deref(&self) -> &Self::Target {
-        // Safety: Requirements are met by the invariants of `UnsafeCell` itself.
-        unsafe { self.0.get().as_ref() }.unwrap()
-        // Additionally, the lifetime requirements are guaranteed by the `&self` borrow.
-    }
-}
-
-impl core::ops::DerefMut for NodeRef<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        // Safety: Requirements are met by the invariants of `UnsafeCell` itself.
-        unsafe { self.0.get().as_mut() }.unwrap()
-        // Additionally, the lifetime requirements are guaranteed by the `&mut self` borrow.
+impl core::fmt::Debug for Nodes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list()
+            .entries(
+                self.composition
+                    .iter()
+                    .map(|binding| self.cache.get(binding).unwrap().borrow().clone()),
+            )
+            .finish()
     }
 }

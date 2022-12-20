@@ -55,13 +55,13 @@ pub enum ErrorKind {
         var_name: String,
     },
 
-    NoTld,
+    NoTle,
 }
 
 #[derive(Debug, Clone)]
 pub struct Error {
     span: Span,
-    kind: ErrorKind,
+    kind: Box<ErrorKind>,
     label: Option<&'static str>,
 }
 
@@ -69,12 +69,12 @@ impl Error {
     pub fn general(span: Span, msg: &str, label: Option<&'static str>) -> Self {
         Self {
             span,
-            kind: ErrorKind::General(msg.to_owned()),
+            kind: Box::new(ErrorKind::General(msg.to_owned())),
             label,
         }
     }
 
-    pub const fn unexpected(
+    pub fn unexpected(
         span: Span,
         expected: Vec<TokenKind>,
         found: Option<TokenKind>,
@@ -82,7 +82,7 @@ impl Error {
     ) -> Self {
         Self {
             span,
-            kind: ErrorKind::Unexpected { expected, found },
+            kind: Box::new(ErrorKind::Unexpected { expected, found }),
             label,
         }
     }
@@ -90,17 +90,17 @@ impl Error {
     pub fn undeclared_var(span: Span, var_name: &str, label: Option<&'static str>) -> Self {
         Self {
             span,
-            kind: ErrorKind::UndeclaredVar {
+            kind: Box::new(ErrorKind::UndeclaredVar {
                 var_name: var_name.to_owned(),
-            },
+            }),
             label,
         }
     }
 
-    pub const fn no_top_level_expr() -> Self {
+    pub fn no_top_level_expr() -> Self {
         Self {
             span: 0..0,
-            kind: ErrorKind::NoTld,
+            kind: Box::new(ErrorKind::NoTle),
             label: None,
         }
     }
@@ -199,7 +199,7 @@ impl Error {
                 .with_label(Label::new(self.span().clone()))
                 .finish(),
 
-            ErrorKind::NoTld => Report::build(ReportKind::Error, (), 8)
+            ErrorKind::NoTle => Report::build(ReportKind::Error, (), 8)
                 .with_message("script has no top-level expression")
                 .finish(),
         }
@@ -217,10 +217,10 @@ impl chumsky::Error<TokenKind> for Error {
     ) -> Self {
         Self {
             span,
-            kind: ErrorKind::Unexpected {
+            kind: Box::new(ErrorKind::Unexpected {
                 expected: expected.into_iter().flatten().collect(),
                 found,
-            },
+            }),
             label: None,
         }
     }
@@ -234,12 +234,12 @@ impl chumsky::Error<TokenKind> for Error {
     ) -> Self {
         Self {
             span,
-            kind: ErrorKind::UnclosedDelimiter {
+            kind: Box::new(ErrorKind::UnclosedDelimiter {
                 delimiter,
                 delimiter_span: unclosed_span,
                 expected,
                 found,
-            },
+            }),
             label: None,
         }
     }
