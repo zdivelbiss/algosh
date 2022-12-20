@@ -9,16 +9,15 @@ fn main() {
         .and_then(|mut file| file.read_to_string(&mut buf))
         .unwrap();
 
-    parse_input(buf.as_str());
+    let nodes = parse_input(buf.as_str());
+    println!("{:?}", nodes);
 }
 
 fn parse_input(input: &str) -> algo::ssa::Nodes {
     let tokens = algo::lexer::lex(input);
     let ast = algo::parser::parse(tokens).unwrap_or_else(|errs| handle_errors(input, errs));
-    let nodes = algo::ssa::translate(ast).unwrap_or_else(|errs| handle_errors(input, errs));
-
-    use algo::ssa::Node;
-
+    let mut nodes = algo::ssa::translate(ast).unwrap_or_else(|errs| handle_errors(input, errs));
+    algo::ssa::optimize(&mut nodes);
 
     nodes
 }

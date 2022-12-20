@@ -1,11 +1,14 @@
 mod optimizer;
 pub use optimizer::*;
 
+mod nodes;
+pub use nodes::*;
+
 use crate::{
     parser::{Expression, HeapExpr, SpannedExpr},
     strings::Symbol,
     types::Type,
-    Error, Operator, Primitive,
+    Error, Operator,
 };
 use std::collections::BTreeMap;
 
@@ -21,18 +24,6 @@ impl Binding {
     pub const fn as_usize(&self) -> usize {
         self.0
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Node {
-    Bind(Primitive),
-    Add(Binding, Binding),
-    Sub(Binding, Binding),
-    Jump(Binding),
-
-    Parameter(Type),
-    Expression(Binding, Scope),
-    Call(Binding),
 }
 
 fn stratify_exprs(ast: Vec<HeapExpr>) -> Result<(SpannedExpr, Defs), Vec<Error>> {
@@ -83,13 +74,13 @@ fn stratify_exprs(ast: Vec<HeapExpr>) -> Result<(SpannedExpr, Defs), Vec<Error>>
 pub fn translate(ast: Vec<HeapExpr>) -> Result<Nodes, Vec<Error>> {
     let (tle, mut defs) = stratify_exprs(ast)?;
 
-    let mut nodes = Vec::new();
+    let mut nodes = Nodes::new();
     let mut scope = Scope::new();
 
     match bind_expr(&tle, &mut nodes, &mut scope, &mut defs) {
         Ok(_) => {
             nodes.shrink_to_fit();
-            Ok(Nodes(nodes))
+            Ok(nodes)
         }
 
         Err(err) => Err(vec![err]),
@@ -199,42 +190,6 @@ fn find_binding(symbol: &Symbol, scopes: &mut Scope) -> Option<Binding> {
             None
         }
     })
-}
-
-pub struct Nodes(Vec<Node>);
-
-impl From<Binding> for usize {
-    fn from(value: Binding) -> Self {
-        value.0
-    }
-}
-
-impl core::ops::Deref for Nodes {
-    type Target = Vec<Node>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl core::ops::DerefMut for Nodes {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl<T: Into<usize>> core::ops::Index<T> for Nodes {
-    type Output = Node;
-
-    fn index(&self, index: T) -> &Self::Output {
-        &self.0[index.into()]
-    }
-}
-
-impl<T: Into<usize>> core::ops::IndexMut<T> for Nodes {
-    fn index_mut(&mut self, index: T) -> &mut Self::Output {
-        &mut self.0[index.into()]
-    }
 }
 
 #[cfg(test)]

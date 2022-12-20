@@ -1,3 +1,3 @@
 var add_one: (a: Int) => a + 1;
 
-1 => add_one
+1 + 2 => add_one
