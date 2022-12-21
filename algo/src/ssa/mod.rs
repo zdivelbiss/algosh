@@ -63,7 +63,10 @@ pub fn translate(ast: Vec<HeapExpr>) -> Result<Nodes, Vec<Error>> {
     let mut scope = Scope::new();
 
     match bind_expr(&tle, &mut nodes, &mut scope, &mut defs) {
-        Ok(_) => Ok(nodes),
+        Ok(binding) => {
+            nodes.bind_push(Node::Return(binding));
+            Ok(nodes)
+        }
 
         Err(err) => Err(vec![err]),
     }
@@ -104,6 +107,7 @@ fn bind_expr(
                 nodes.bind_push(new_node)
             }),
 
+            // TODO figure out how to model passing arguments to expressions
             Expression::Identifier(symbol) => match find_binding(*symbol, scope) {
                 Some(binding) => Ok(binding),
                 None => bind_def(*symbol, nodes, defs),
@@ -147,33 +151,20 @@ fn bind_def(name: Symbol, nodes: &mut Nodes, defs: &mut Defs) -> Result<Binding,
                     };
 
     let mut def_scope = Scope::new();
-    let params = match ty {
-        Type::Unit => {
-            let new_node = Node::Parameter(Type::Unit);
-            nodes.bind_push(new_node)
-        }
-        Type::Tuple(params) => params
-            .into_iter()
-            .map(|(name, ty)| {
-                let param_bind = {
-                    let new_node = Node::Parameter(ty);
-                    nodes.bind_push(new_node)
-                };
-                def_scope.push((name, param_bind.clone()));
+    match ty {
+        Type::Tuple(params) => params.into_iter().for_each(|(name, ty)| {
+            def_scope.push((name, nodes.bind_push(Node::Parameter(ty))));
+        }),
 
-                param_bind
-            })
-            .last()
-            .unwrap(),
+        // Unit is acceptable as a parameter grouping, but requires no scoping variables.
+        Type::Unit => {}
 
-        _ => unimplemented!(),
-    };
+        // Top-level definitions accept no other parameter grouping types.
+        _ => unreachable!(),
+    }
 
     bind_expr(&expr, nodes, &mut def_scope, defs)?;
-    Ok({
-        let new_node = Node::Expression(params, def_scope);
-        nodes.bind_push(new_node)
-    })
+    Ok(nodes.bind_push(Node::Expression(def_scope)))
 }
 
 fn find_binding(symbol: Symbol, scopes: &mut Scope) -> Option<Binding> {

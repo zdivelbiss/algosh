@@ -76,10 +76,13 @@ fn parse_aggregate<'a>() -> AlgoParser<'a, Vec<HeapExpr>> {
 }
 
 fn parse_vardef<'a>() -> AlgoParser<'a, SpannedExpr> {
-    let body = parse_tuple_type()
-        .then_ignore(just(TokenKind::Flow))
-        .then(parse_flow())
-        .boxed();
+    let body = choice((
+        parse_tuple_type(),
+        select! { TokenKind::TypeUnit => Type::Unit },
+    ))
+    .then_ignore(just(TokenKind::Flow))
+    .then(parse_flow())
+    .boxed();
 
     let body_terminated = body.clone().then_ignore(just(TokenKind::Terminator));
     let body_delimited = body.delimited_by(just(TokenKind::BlockOpen), just(TokenKind::BlockClose));

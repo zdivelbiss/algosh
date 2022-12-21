@@ -1,9 +1,12 @@
-use std::{cell::RefCell, collections::BTreeMap};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    collections::HashMap,
+};
 
 use crate::{ssa::Scope, types::Type, Primitive};
 
 #[repr(transparent)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Binding(usize);
 
 impl Binding {
@@ -39,11 +42,12 @@ pub enum Node {
     Bind(Primitive),
     Add(Binding, Binding),
     Sub(Binding, Binding),
-    Jump(Binding),
 
     Parameter(Type),
-    Expression(Binding, Scope),
     Call(Binding),
+    Jump(Binding),
+    Expression(Scope),
+    Return(Binding),
 }
 
 impl Node {
@@ -76,15 +80,18 @@ impl Node {
     }
 }
 
+type NodeRef<'a> = (&'a Binding, Ref<'a, Node>);
+type NodeMut<'a> = (&'a Binding, RefMut<'a, Node>);
+
 pub struct Nodes {
-    cache: BTreeMap<Binding, RefCell<Node>>,
+    cache: HashMap<Binding, RefCell<Node>>,
     composition: Vec<Binding>,
 }
 
 impl Nodes {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            cache: BTreeMap::new(),
+            cache: HashMap::new(),
             composition: Vec::new(),
         }
     }
@@ -117,16 +124,74 @@ impl Nodes {
         }
     }
 
-    pub fn get<Idx: NodeIndex>(&self, index: Idx) -> Option<core::cell::Ref<Node>> {
+    pub fn get<Idx: NodeIndex>(&self, index: Idx) -> Option<Ref<Node>> {
         self.cache
             .get(&self.binding_index(index)?)
             .map(RefCell::borrow)
     }
 
-    pub fn get_mut<Idx: NodeIndex>(&self, index: Idx) -> Option<core::cell::RefMut<Node>> {
+    pub fn get_mut<Idx: NodeIndex>(&self, index: Idx) -> Option<RefMut<Node>> {
         self.cache
             .get(&self.binding_index(index)?)
             .map(RefCell::borrow_mut)
+    }
+
+    pub fn remove<Idx: NodeIndex>(&mut self, index: Idx) {
+        self.binding_index(index)
+            .and_then(|binding| self.cache.remove(&binding))
+            .expect("index not found");
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = NodeRef> {
+        self.composition
+            .iter()
+            .map(|binding| (binding, self.get(binding.clone()).unwrap()))
+            .into_iter()
+    }
+
+    pub fn iter_mut(&self) -> impl Iterator<Item = NodeMut> {
+        self.composition
+            .iter()
+            .map(|binding| (binding, self.get_mut(binding.clone()).unwrap()))
+            .into_iter()
+    }
+
+    pub fn first(&self) -> Option<NodeRef> {
+        self.composition
+            .first()
+            .map(|binding| (binding, self.get(binding.clone()).unwrap()))
+    }
+
+    pub fn first_mut(&self) -> Option<NodeMut> {
+        self.composition
+            .first()
+            .map(|binding| (binding, self.get_mut(binding.clone()).unwrap()))
+    }
+
+    pub fn last(&self) -> Option<NodeRef> {
+        self.composition
+            .last()
+            .map(|binding| (binding, self.get(binding.clone()).unwrap()))
+    }
+
+    pub fn last_mut(&self) -> Option<NodeMut> {
+        self.composition
+            .last()
+            .map(|binding| (binding, self.get_mut(binding.clone()).unwrap()))
+    }
+
+    pub fn retain(&mut self, f: impl Fn(&Binding) -> bool) {
+        self.cache.retain(|binding, _| f(binding));
+
+        let mut index = self.composition.len();
+        while index > 0 {
+            let cur_index = index - 1;
+            if !self.cache.contains_key(&self.composition[cur_index]) {
+                self.composition.remove(cur_index);
+            }
+
+            index -= 1;
+        }
     }
 }
 
