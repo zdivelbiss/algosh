@@ -24,7 +24,7 @@ fn stratify_exprs(
                 let (expr, span) = *expr;
                 match expr {
                     Expression::VarDef { name, in_ty, expr } => {
-                        assert!(defs.insert(name, (in_ty, *expr)).is_none());
+                        assert_eq!(defs.insert(name, (in_ty, *expr)), None);
                     }
 
                     expr if !expr.is_def() => tles.push((expr, span)),
@@ -86,6 +86,10 @@ pub fn translate(ast: Vec<HeapExpr>) -> Result<Nodes, Vec<Error>> {
     });
 
     // TODO parse top-level definitions into functions
+
+
+    
+
 
     match bind_expr(&tle, &mut nodes, &mut scope, &mut defs) {
         Ok(binding) => {
@@ -149,15 +153,20 @@ fn bind_expr(expr: &SpannedExpr, nodes: &mut Nodes, scope: &mut Scope) -> Result
             }),
 
             // TODO figure out how to model passing arguments to expressions
-            Expression::Identifier(symbol) => match find_binding(*symbol, scope) {
-                Some(binding) => Ok(binding),
-                None => bind_def(*symbol, nodes, defs),
-            },
+            Expression::Identifier(symbol) => {
+                let binding = match find_binding(*symbol, scope) {
+                    Some(binding) => Ok(binding),
+                    None => bind_def(*symbol, nodes, defs),
+                }?;
+
+                let bound_node = nodes.get(binding).unwrap();
+            }
 
             Expression::Flow {
                 from: expr,
                 to: next,
             } => {
+                // TODO maintain scope changes from `bind_from`
                 let bind_from = bind_expr(expr.as_ref(), nodes, scope, defs)?;
                 let bind_to = next
                     .as_ref()
@@ -179,33 +188,6 @@ fn bind_expr(expr: &SpannedExpr, nodes: &mut Nodes, scope: &mut Scope) -> Result
     scope.drain(scope_mark..);
 
     result
-}
-
-fn bind_def(name: Symbol, nodes: &mut Nodes, defs: &mut Defs) -> Result<Binding, Error> {
-    let Some((ty, expr)) = defs.remove(&name)
-                    else {
-                        return Err(Error::undeclared_var(
-                            0..0, // TODO
-                            crate::strings::get_intern_str(name).as_str(),
-                            Some("ssa_identifier"),
-                        ));
-                    };
-
-    let mut def_scope = Scope::new();
-    match ty {
-        Type::Tuple(params) => params.into_iter().for_each(|(name, ty)| {
-            def_scope.push((name, nodes.bind_push(Node::Parameter(ty))));
-        }),
-
-        // Unit is acceptable as a parameter grouping, but requires no scoping variables.
-        Type::Unit => {}
-
-        // Top-level definitions accept no other parameter grouping types.
-        _ => unreachable!(),
-    }
-
-    bind_expr(&expr, nodes, &mut def_scope, defs)?;
-    Ok(nodes.bind_push(Node::Expression(def_scope)))
 }
 
 fn find_binding(symbol: Symbol, scopes: &mut Scope) -> Option<Binding> {
