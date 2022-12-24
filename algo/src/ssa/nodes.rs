@@ -1,9 +1,8 @@
+use crate::{types::Type, Primitive};
 use std::{
     cell::{Ref, RefCell, RefMut},
     collections::HashMap,
 };
-
-use crate::{ssa::Scope, types::Type, Primitive};
 
 #[repr(transparent)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -46,7 +45,7 @@ pub enum Node {
     Parameter(Type),
     Call(Binding),
     Jump(Binding),
-    Expression(Scope),
+    Expression(super::Params),
     Return(Binding),
 }
 
@@ -182,16 +181,8 @@ impl Nodes {
 
     pub fn retain(&mut self, f: impl Fn(&Binding) -> bool) {
         self.cache.retain(|binding, _| f(binding));
-
-        let mut index = self.composition.len();
-        while index > 0 {
-            let cur_index = index - 1;
-            if !self.cache.contains_key(&self.composition[cur_index]) {
-                self.composition.remove(cur_index);
-            }
-
-            index -= 1;
-        }
+        self.composition
+            .retain(|binding| self.cache.contains_key(binding));
     }
 }
 

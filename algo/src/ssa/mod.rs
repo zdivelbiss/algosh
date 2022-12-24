@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 
 type Scope = Vec<(Symbol, Binding)>;
 type Defs = BTreeMap<Symbol, (Type, SpannedExpr)>;
+type Params = Vec<(Symbol, Type)>;
 
 fn stratify_exprs(ast: Vec<HeapExpr>) -> Result<(SpannedExpr, Defs), Vec<Error>> {
     // TLE, or `Top Level Expression`
@@ -23,7 +24,7 @@ fn stratify_exprs(ast: Vec<HeapExpr>) -> Result<(SpannedExpr, Defs), Vec<Error>>
                 let (expr, span) = *expr;
                 match expr {
                     Expression::VarDef { name, in_ty, expr } => {
-                        assert!(defs.insert(name, (in_ty, *expr)).is_none());
+                        assert_eq!(defs.insert(name, (in_ty, *expr)), None);
                     }
 
                     expr if !expr.is_def() => tles.push((expr, span)),
@@ -62,6 +63,10 @@ pub fn translate(ast: Vec<HeapExpr>) -> Result<Nodes, Vec<Error>> {
     let mut nodes = Nodes::new();
     let mut scope = Scope::new();
 
+
+    
+
+
     match bind_expr(&tle, &mut nodes, &mut scope, &mut defs) {
         Ok(binding) => {
             nodes.bind_push(Node::Return(binding));
@@ -72,12 +77,11 @@ pub fn translate(ast: Vec<HeapExpr>) -> Result<Nodes, Vec<Error>> {
     }
 }
 
-fn bind_expr(
-    expr: &SpannedExpr,
-    nodes: &mut Nodes,
-    scope: &mut Scope,
-    defs: &mut Defs,
-) -> Result<Binding, Error> {
+fn bind_def(expr: &SpannedExpr) -> Result<(Nodes, Scope), Vec<Error>> {
+
+}
+
+fn bind_expr(expr: &SpannedExpr, nodes: &mut Nodes, scope: &mut Scope) -> Result<Binding, Error> {
     // mark scope start
     let scope_mark = scope.len();
 
@@ -108,15 +112,20 @@ fn bind_expr(
             }),
 
             // TODO figure out how to model passing arguments to expressions
-            Expression::Identifier(symbol) => match find_binding(*symbol, scope) {
-                Some(binding) => Ok(binding),
-                None => bind_def(*symbol, nodes, defs),
-            },
+            Expression::Identifier(symbol) => {
+                let binding = match find_binding(*symbol, scope) {
+                    Some(binding) => Ok(binding),
+                    None => bind_def(*symbol, nodes, defs),
+                }?;
+
+                let bound_node = nodes.get(binding).unwrap();
+            }
 
             Expression::Flow {
                 from: expr,
                 to: next,
             } => {
+                // TODO maintain scope changes from `bind_from`
                 let bind_from = bind_expr(expr.as_ref(), nodes, scope, defs)?;
                 let bind_to = next
                     .as_ref()
@@ -140,6 +149,8 @@ fn bind_expr(
     result
 }
 
+fn call_def(name: Symbol, nodes: &mut Nodes, defs: &mut Defs) -> Result<Binding, Error> {}
+
 fn bind_def(name: Symbol, nodes: &mut Nodes, defs: &mut Defs) -> Result<Binding, Error> {
     let Some((ty, expr)) = defs.remove(&name)
                     else {
@@ -151,20 +162,21 @@ fn bind_def(name: Symbol, nodes: &mut Nodes, defs: &mut Defs) -> Result<Binding,
                     };
 
     let mut def_scope = Scope::new();
-    match ty {
-        Type::Tuple(params) => params.into_iter().for_each(|(name, ty)| {
-            def_scope.push((name, nodes.bind_push(Node::Parameter(ty))));
-        }),
-
+    let params = match ty {
+        Type::Tuple(params) => params,
         // Unit is acceptable as a parameter grouping, but requires no scoping variables.
-        Type::Unit => {}
+        Type::Unit => vec![],
 
         // Top-level definitions accept no other parameter grouping types.
         _ => unreachable!(),
-    }
+    };
 
+    let mut def_scope = params
+        .iter()
+        .map(|(name, ty)| (*name, nodes.bind_push(Node::Parameter(ty.clone()))))
+        .collect();
     bind_expr(&expr, nodes, &mut def_scope, defs)?;
-    Ok(nodes.bind_push(Node::Expression(def_scope)))
+    Ok(nodes.bind_push(Node::Expression(params)))
 }
 
 fn find_binding(symbol: Symbol, scopes: &mut Scope) -> Option<Binding> {
