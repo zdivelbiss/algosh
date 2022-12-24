@@ -13,9 +13,10 @@ use crate::{
 use std::collections::BTreeMap;
 
 type Scope = Vec<(Symbol, Binding)>;
-type Defs = BTreeMap<Symbol, (Type, SpannedExpr)>;
 
-fn stratify_exprs(ast: Vec<HeapExpr>) -> Result<(SpannedExpr, Defs), Vec<Error>> {
+fn stratify_exprs(
+    ast: Vec<HeapExpr>,
+) -> Result<(SpannedExpr, BTreeMap<Symbol, (Type, SpannedExpr)>), Vec<Error>> {
     // TLE, or `Top Level Expression`
     let (defs, tles) =
         ast.into_iter()
@@ -61,6 +62,30 @@ pub fn translate(ast: Vec<HeapExpr>) -> Result<Nodes, Vec<Error>> {
 
     let mut nodes = Nodes::new();
     let mut scope = Scope::new();
+    let mut defs = BTreeMap::new();
+
+    let mut defs = defs.into_iter().for_each(|(name, (ty, expr))| {
+        let mut def_nodes = Nodes::new();
+        let mut def_scope = Scope::new();
+
+        match ty {
+            Type::Tuple(params) => params.into_iter().for_each(|(name, ty)| {
+                def_scope.push((name, def_nodes.bind_push(Node::Parameter(ty))));
+            }),
+
+            // Unit is acceptable as a parameter grouping, but requires no scoping variables.
+            Type::Unit => {}
+
+            // Top-level definitions accept no other parameter grouping types.
+            _ => unreachable!(),
+        }
+
+        bind_expr(&expr, nodes, &mut def_scope, None)?;
+
+        (name, (def_nodes, def_scope))
+    });
+
+    // TODO parse top-level definitions into functions
 
     match bind_expr(&tle, &mut nodes, &mut scope, &mut defs) {
         Ok(binding) => {
@@ -72,12 +97,28 @@ pub fn translate(ast: Vec<HeapExpr>) -> Result<Nodes, Vec<Error>> {
     }
 }
 
-fn bind_expr(
-    expr: &SpannedExpr,
-    nodes: &mut Nodes,
-    scope: &mut Scope,
-    defs: &mut Defs,
-) -> Result<Binding, Error> {
+fn bind_def(expr: &SpannedExpr, outer_scope: &mut Scope) -> Result<Nodes, Vec<Error>> {
+    let mut nodes = Nodes::new();
+    let mut scope = Scope::new();
+
+    match ty {
+        Type::Tuple(params) => params.into_iter().for_each(|(name, ty)| {
+            scope.push((name, nodes.bind_push(Node::Parameter(ty))));
+        }),
+
+        // Unit is acceptable as a parameter grouping, but requires no scoping variables.
+        Type::Unit => {}
+
+        // Top-level definitions accept no other parameter grouping types.
+        _ => unreachable!(),
+    }
+
+    bind_expr(&expr, &mut nodes, &mut scope)?;
+
+    nodes
+}
+
+fn bind_expr(expr: &SpannedExpr, nodes: &mut Nodes, scope: &mut Scope) -> Result<Binding, Error> {
     // mark scope start
     let scope_mark = scope.len();
 
