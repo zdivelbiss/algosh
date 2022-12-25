@@ -58,38 +58,15 @@ fn stratify_exprs(
 }
 
 pub fn translate(ast: Vec<HeapExpr>) -> Result<Nodes, Vec<Error>> {
-    let (tle, mut defs) = stratify_exprs(ast)?;
+    for expr in ast {
+match *expr {
 
-    let mut nodes = Nodes::new();
-    let mut scope = Scope::new();
-    let mut defs = BTreeMap::new();
+}
 
-    let mut defs = defs.into_iter().for_each(|(name, (ty, expr))| {
-        let mut def_nodes = Nodes::new();
-        let mut def_scope = Scope::new();
-
-        match ty {
-            Type::Tuple(params) => params.into_iter().for_each(|(name, ty)| {
-                def_scope.push((name, def_nodes.bind_push(Node::Parameter(ty))));
-            }),
-
-            // Unit is acceptable as a parameter grouping, but requires no scoping variables.
-            Type::Unit => {}
-
-            // Top-level definitions accept no other parameter grouping types.
-            _ => unreachable!(),
-        }
-
-        bind_expr(&expr, nodes, &mut def_scope, None)?;
-
-        (name, (def_nodes, def_scope))
-    });
+        let (nodes, scope) = bind_def(*expr, )?;
+    }
 
     // TODO parse top-level definitions into functions
-
-
-    
-
 
     match bind_expr(&tle, &mut nodes, &mut scope, &mut defs) {
         Ok(binding) => {
@@ -101,25 +78,29 @@ pub fn translate(ast: Vec<HeapExpr>) -> Result<Nodes, Vec<Error>> {
     }
 }
 
-fn bind_def(expr: &SpannedExpr, outer_scope: &mut Scope) -> Result<Nodes, Vec<Error>> {
+fn bind_def(
+    expr: SpannedExpr,
+    ty: Type,
+    outer_scope: &mut Scope,
+) -> Result<(Nodes, Scope), Vec<Error>> {
     let mut nodes = Nodes::new();
-    let mut scope = Scope::new();
-
-    match ty {
-        Type::Tuple(params) => params.into_iter().for_each(|(name, ty)| {
-            scope.push((name, nodes.bind_push(Node::Parameter(ty))));
-        }),
+    let mut scope = match ty {
+        Type::Tuple(params) => params
+            .into_iter()
+            .map(|(name, ty)| (name, nodes.bind_push(Node::Parameter(ty))))
+            .collect(),
 
         // Unit is acceptable as a parameter grouping, but requires no scoping variables.
-        Type::Unit => {}
+        Type::Unit => Scope::new(),
 
         // Top-level definitions accept no other parameter grouping types.
         _ => unreachable!(),
+    };
+
+    match bind_expr(&expr, &mut nodes, &mut scope) {
+        Ok(_) => Ok((nodes, scope)),
+        Err(err) => Err(vec![err]),
     }
-
-    bind_expr(&expr, &mut nodes, &mut scope)?;
-
-    nodes
 }
 
 fn bind_expr(expr: &SpannedExpr, nodes: &mut Nodes, scope: &mut Scope) -> Result<Binding, Error> {
