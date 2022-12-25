@@ -25,52 +25,9 @@ pub enum Expression {
         rhs: HeapExpr,
     },
 
-    TypeDef {
-        name: Symbol,
-        ty: Type,
-    },
-
-    VarDef {
-        name: Symbol,
-        in_ty: Type,
-        expr: HeapExpr,
-    },
-
-    Control {
-        exprs: Vec<SpannedExpr>,
-    },
-
-    Flow {
-        from: HeapExpr,
+    ControlFlow {
+        from: Vec<SpannedExpr>,
         to: Option<HeapExpr>,
-    },
-}
-
-impl Expression {
-    pub const fn is_def(&self) -> bool {
-        matches!(
-            self,
-            Expression::TypeDef { name: _, ty: _ }
-                | Expression::VarDef {
-                    name: _,
-                    in_ty: _,
-                    expr: _
-                }
-        )
-    }
-}
-
-enum Atom {
-    Named {
-        name: Symbol,
-        ty: Option<Type>,
-        expr: Expression,
-        span: Span,
-    },
-
-    Unnamed {
-        expr: Expression,
-        span: Span,
     },
 }
 
@@ -79,6 +36,13 @@ type AlgoParser<'a, T> = BoxedParser<'a, TokenKind, T, Error>;
 pub type SpannedExpr = (Expression, Span);
 pub type HeapExpr = Box<SpannedExpr>;
 
+pub struct Atom {
+    pub name: Option<Symbol>,
+    pub in_ty: Type,
+    pub expr: Expression,
+    pub span: Span,
+}
+
 pub fn parse(tokens: crate::lexer::Tokens) -> Result<Vec<Atom>, Vec<Error>> {
     parse_aggregate().parse(tokens)
 }
@@ -86,7 +50,12 @@ pub fn parse(tokens: crate::lexer::Tokens) -> Result<Vec<Atom>, Vec<Error>> {
 fn parse_aggregate<'a>() -> AlgoParser<'a, Vec<Atom>> {
     choice((
         parse_vardef(),
-        parse_flow().map(|(expr, span)| Atom::Unnamed { expr, span }),
+        parse_control_flow().map(|(expr, span)| Atom {
+            name: None,
+            in_ty: Type::Unit,
+            expr,
+            span,
+        }),
     ))
     .repeated()
     .then_ignore(end())
@@ -99,7 +68,7 @@ fn parse_vardef<'a>() -> AlgoParser<'a, Atom> {
         select! { TokenKind::TypeUnit => Type::Unit },
     ))
     .then_ignore(just(TokenKind::Flow))
-    .then(parse_flow())
+    .then(parse_control_flow())
     .boxed();
 
     let body_terminated = body.clone().then_ignore(just(TokenKind::Terminator));
@@ -109,9 +78,9 @@ fn parse_vardef<'a>() -> AlgoParser<'a, Atom> {
         .ignore_then(parse_symbol())
         .then_ignore(just(TokenKind::Assign))
         .then(choice((body_terminated, body_delimited)))
-        .map_with_span(|(name, (ty, (expr, span))), _| Atom::Named {
-            name,
-            ty: Some(ty),
+        .map_with_span(|(name, (in_ty, (expr, span))), _| Atom {
+            name: Some(name),
+            in_ty,
             expr,
             span,
         })
@@ -119,16 +88,16 @@ fn parse_vardef<'a>() -> AlgoParser<'a, Atom> {
         .boxed()
 }
 
-fn parse_typedef<'a>() -> AlgoParser<'a, SpannedExpr> {
-    just(TokenKind::TypeDef)
-        .ignore_then(parse_symbol())
-        .then_ignore(just(TokenKind::Assign))
-        .then(parse_type())
-        .then_ignore(just(TokenKind::Terminator))
-        .map_with_span(|(name, ty), span| (Expression::TypeDef { name, ty }, span))
-        .labelled("parse_typedef")
-        .boxed()
-}
+// fn parse_typedef<'a>() -> AlgoParser<'a, SpannedExpr> {
+//     just(TokenKind::TypeDef)
+//         .ignore_then(parse_symbol())
+//         .then_ignore(just(TokenKind::Assign))
+//         .then(parse_type())
+//         .then_ignore(just(TokenKind::Terminator))
+//         .map_with_span(|(name, ty), span| (Expression::TypeDef { name, ty }, span))
+//         .labelled("parse_typedef")
+//         .boxed()
+// }
 
 fn parse_type() -> impl Parser<TokenKind, Type, Error = Error> {
     choice((
@@ -188,40 +157,35 @@ fn parse_structural_type() -> impl Parser<TokenKind, Type, Error = Error> {
     }
 }
 
-fn parse_flow<'a>() -> AlgoParser<'a, SpannedExpr> {
-    recursive(|expr| {
-        parse_control()
-            .then(just(TokenKind::Flow).ignore_then(expr).or_not())
-            .map_with_span(|(expr, next), span| {
+fn parse_control_flow<'a>() -> AlgoParser<'a, SpannedExpr> {
+    recursive(|next| {
+        let control_expr = choice((parse_tuple(), parse_array()))
+            .map_with_span(|expr, span| (expr, span))
+            .or(parse_expr())
+            .separated_by(just(TokenKind::Terminator))
+            .at_least(1);
+
+        let control_block = control_expr
+            .clone()
+            .delimited_by(just(TokenKind::BlockOpen), just(TokenKind::BlockClose))
+            .boxed();
+
+        control_block
+            .or(control_expr)
+            .then(just(TokenKind::Flow).ignore_then(next).or_not())
+            .map_with_span(|(exprs, next), span| {
                 (
-                    Expression::Flow {
-                        from: Box::new(expr),
+                    Expression::ControlFlow {
+                        from: exprs,
                         to: next.map(Box::new),
                     },
                     span,
                 )
             })
+            .boxed()
     })
-    .labelled("parse_flow")
+    .labelled("parse_control_flow")
     .boxed()
-}
-
-fn parse_control<'a>() -> AlgoParser<'a, SpannedExpr> {
-    let control = choice((parse_tuple(), parse_array()))
-        .map_with_span(|expr, span| (expr, span))
-        .or(parse_expr());
-
-    let control_block = control
-        .clone()
-        .separated_by(just(TokenKind::Terminator))
-        .at_least(2)
-        .delimited_by(just(TokenKind::BlockOpen), just(TokenKind::BlockClose));
-
-    control_block
-        .or(control.map(|expr| vec![expr]))
-        .map_with_span(|exprs, span| (Expression::Control { exprs }, span))
-        .labelled("parse_control")
-        .boxed()
 }
 
 #[allow(clippy::too_many_lines)]

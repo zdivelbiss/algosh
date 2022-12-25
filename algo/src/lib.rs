@@ -26,6 +26,7 @@ pub mod lexer;
 pub mod parser;
 pub mod strings;
 pub mod types;
+pub mod defs;
 
 #[cfg(test)]
 mod tests;
