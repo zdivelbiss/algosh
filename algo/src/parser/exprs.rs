@@ -1,4 +1,4 @@
-use crate::{lexer::TokenKind, strings::Symbol, types::Type, Error, Operator, Primitive};
+use crate::{lexer::TokenKind, strings::Symbol, types::Type, Error, Operator, Span};
 use chumsky::{
     primitive::{choice, end, just},
     recovery::nested_delimiters,
@@ -10,11 +10,14 @@ use chumsky::{
 pub enum Expression {
     Error,
 
-    Primitive(Primitive),
-    Identifier(Symbol),
-
+    Unit,
+    Int(isize),
+    UInt(usize),
+    Bool(bool),
     Array(Vec<SpannedExpr>),
     Tuple(Vec<SpannedExpr>),
+
+    Identifier(Symbol),
 
     Binary {
         lhs: HeapExpr,
@@ -57,25 +60,40 @@ impl Expression {
     }
 }
 
-type Spanned<T> = (T, crate::Span);
+enum Atom {
+    Named {
+        name: Symbol,
+        ty: Option<Type>,
+        expr: Expression,
+        span: Span,
+    },
+
+    Unnamed {
+        expr: Expression,
+        span: Span,
+    },
+}
+
 type AlgoParser<'a, T> = BoxedParser<'a, TokenKind, T, Error>;
 
+pub type SpannedExpr = (Expression, Span);
 pub type HeapExpr = Box<SpannedExpr>;
-pub type SpannedExpr = Spanned<Expression>;
 
-pub fn parse(tokens: crate::lexer::Tokens) -> Result<Vec<HeapExpr>, Vec<Error>> {
+pub fn parse(tokens: crate::lexer::Tokens) -> Result<Vec<Atom>, Vec<Error>> {
     parse_aggregate().parse(tokens)
 }
 
-fn parse_aggregate<'a>() -> AlgoParser<'a, Vec<HeapExpr>> {
-    choice((parse_typedef(), parse_vardef(), parse_flow()))
-        .map(Box::new)
-        .repeated()
-        .then_ignore(end())
-        .boxed()
+fn parse_aggregate<'a>() -> AlgoParser<'a, Vec<Atom>> {
+    choice((
+        parse_vardef(),
+        parse_flow().map(|(expr, span)| Atom::Unnamed { expr, span }),
+    ))
+    .repeated()
+    .then_ignore(end())
+    .boxed()
 }
 
-fn parse_vardef<'a>() -> AlgoParser<'a, SpannedExpr> {
+fn parse_vardef<'a>() -> AlgoParser<'a, Atom> {
     let body = choice((
         parse_tuple_type(),
         select! { TokenKind::TypeUnit => Type::Unit },
@@ -91,15 +109,11 @@ fn parse_vardef<'a>() -> AlgoParser<'a, SpannedExpr> {
         .ignore_then(parse_symbol())
         .then_ignore(just(TokenKind::Assign))
         .then(choice((body_terminated, body_delimited)))
-        .map_with_span(|(name, (in_ty, expr)), span| {
-            (
-                Expression::VarDef {
-                    name,
-                    in_ty,
-                    expr: Box::new(expr),
-                },
-                span,
-            )
+        .map_with_span(|(name, (ty, (expr, span))), _| Atom::Named {
+            name,
+            ty: Some(ty),
+            expr,
+            span,
         })
         .labelled("parse_vardef")
         .boxed()
@@ -214,7 +228,9 @@ fn parse_control<'a>() -> AlgoParser<'a, SpannedExpr> {
 fn parse_expr<'a>() -> AlgoParser<'a, SpannedExpr> {
     recursive(|expr| {
         let atom = choice((
-            parse_structural_primitive().map(Expression::Primitive),
+            parse_integer().map(Expression::Int),
+            parse_uinteger().map(Expression::UInt),
+            parse_bool().map(Expression::Bool),
             parse_symbol().map(Expression::Identifier),
         ))
         .map_with_span(|expr, span| (expr, span))
@@ -354,15 +370,6 @@ fn parse_array<'a>() -> AlgoParser<'a, Expression> {
         .boxed()
 }
 
-fn parse_structural_primitive() -> impl Parser<TokenKind, Primitive, Error = Error> {
-    choice((
-        parse_integer().map(Primitive::Int),
-        parse_uinteger().map(Primitive::UInt),
-        parse_bool().map(Primitive::Bool),
-    ))
-    .labelled("parse_primitive")
-}
-
 fn parse_integer() -> impl Parser<TokenKind, isize, Error = Error> {
     select! { TokenKind::Integer(x) => x }.labelled("parse_integer")
 }
@@ -381,7 +388,7 @@ fn parse_symbol() -> impl Parser<TokenKind, Symbol, Error = Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{interned, tests::parse_and_eq, Operator, Primitive};
+    use crate::{interned, tests::parse_and_eq, Operator};
 
     use super::Expression;
 
@@ -394,14 +401,14 @@ mod tests {
                 Expression::Binary {
                     lhs: Box::new((
                         Expression::Binary {
-                            lhs: Box::new((Expression::Primitive(Primitive::Bool(false)), 1..6)),
+                            lhs: Box::new((Expression::Bool(false), 1..6)),
                             op: Operator::Clow,
-                            rhs: Box::new((Expression::Primitive(Primitive::Int(1)), 10..11)),
+                            rhs: Box::new((Expression::Int(1), 10..11)),
                         },
                         1..11,
                     )),
                     op: Operator::Cerm,
-                    rhs: Box::new((Expression::Primitive(Primitive::Int(3)), 16..17)),
+                    rhs: Box::new((Expression::Int(3), 16..17)),
                 },
                 1..17,
             ),
@@ -418,7 +425,7 @@ mod tests {
                     Expression::Binary {
                         lhs: Box::new((Expression::Identifier(interned!("a")), 1..2)),
                         op: Operator::Assign,
-                        rhs: Box::new((Expression::Primitive(Primitive::Int(1)), 4..5)),
+                        rhs: Box::new((Expression::Int(1), 4..5)),
                     },
                     1..5,
                 ),
@@ -426,7 +433,7 @@ mod tests {
                     Expression::Binary {
                         lhs: Box::new((Expression::Identifier(interned!("b")), 7..8)),
                         op: Operator::Assign,
-                        rhs: Box::new((Expression::Primitive(Primitive::Bool(false)), 10..15)),
+                        rhs: Box::new((Expression::Bool(false), 10..15)),
                     },
                     7..15,
                 ),

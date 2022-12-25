@@ -2,10 +2,10 @@ use std::ops;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Primitive {
-    Unit,
-    Int(isize),
-    UInt(usize),
-    Bool(bool),
+
+
+
+
 }
 
 impl ops::Add for Primitive {

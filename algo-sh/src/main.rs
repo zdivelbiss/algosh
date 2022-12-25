@@ -18,7 +18,7 @@ fn main() {
 
 fn parse_input(input: &str) -> algo::ssa::Nodes {
     let tokens = algo::lexer::lex(input);
-    let ast = algo::parser::parse(tokens).unwrap_or_else(|errs| handle_errors(input, errs));
+    let ast = algo::parser::exprs::parse(tokens).unwrap_or_else(|errs| handle_errors(input, errs));
     let mut nodes = algo::ssa::translate(ast).unwrap_or_else(|errs| handle_errors(input, errs));
     algo::ssa::optimize(&mut nodes);
 

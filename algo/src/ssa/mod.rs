@@ -59,14 +59,10 @@ fn stratify_exprs(
 
 pub fn translate(ast: Vec<HeapExpr>) -> Result<Nodes, Vec<Error>> {
     for expr in ast {
-match *expr {
+        match *expr {}
 
-}
-
-        let (nodes, scope) = bind_def(*expr, )?;
+        let (nodes, scope) = bind_def(*expr)?;
     }
-
-    // TODO parse top-level definitions into functions
 
     match bind_expr(&tle, &mut nodes, &mut scope, &mut defs) {
         Ok(binding) => {
@@ -76,6 +72,8 @@ match *expr {
 
         Err(err) => Err(vec![err]),
     }
+
+    todo!()
 }
 
 fn bind_def(

@@ -21,12 +21,9 @@
 use ariadne::Report;
 use lexer::TokenKind;
 
-mod primitive;
-pub use primitive::*;
-
+// pub mod ssa;
 pub mod lexer;
 pub mod parser;
-pub mod ssa;
 pub mod strings;
 pub mod types;
 

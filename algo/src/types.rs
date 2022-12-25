@@ -14,4 +14,4 @@ pub enum Type {
     Expression { input: Box<Self>, output: Box<Self> },
 
     Checked(Symbol),
-}
+}   
