@@ -8,21 +8,18 @@ fn main() {
         .unwrap();
 
     let start = Instant::now();
-    let nodes = parse_input(buf.as_str());
+
+    let input = buf.as_str();
+    let tokens = algo::lexer::lex(input);
+    let exprs = algo::parser::parse(tokens).unwrap_or_else(|errs| handle_errors(input, errs));
+    let typed_ast =
+        algo::types::type_exprs(exprs).unwrap_or_else(|errs| handle_errors(input, errs));
+
     let end = Instant::now();
     let compile_time = end - start;
 
     println!("Compiled script in {:.4}s", compile_time.as_secs_f32());
-    println!("{:?}", nodes);
-}
-
-fn parse_input(input: &str) -> algo::ssa::Nodes {
-    let tokens = algo::lexer::lex(input);
-    let ast = algo::parser::exprs::parse(tokens).unwrap_or_else(|errs| handle_errors(input, errs));
-    let mut nodes = algo::ssa::translate(ast).unwrap_or_else(|errs| handle_errors(input, errs));
-    algo::ssa::optimize(&mut nodes);
-
-    nodes
+    println!("{:?}", typed_ast);
 }
 
 fn handle_errors(src: &str, errs: Vec<algo::Error>) -> ! {

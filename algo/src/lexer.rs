@@ -30,7 +30,7 @@ pub enum TokenKind {
     ArrayClose,
 
     #[token("var")]
-    VarDef,
+    Var,
     #[token("type")]
     TypeDef,
 
@@ -153,7 +153,7 @@ impl core::fmt::Display for TokenKind {
             TokenKind::BlockClose => "}",
             TokenKind::ArrayOpen => "[",
             TokenKind::ArrayClose => "]",
-            TokenKind::VarDef => "var",
+            TokenKind::Var => "var",
             TokenKind::TypeDef => "type",
             TokenKind::TypeUnit => "()",
             TokenKind::TypeInt => "Int",
