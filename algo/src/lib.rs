@@ -22,11 +22,11 @@ use ariadne::Report;
 use lexer::TokenKind;
 
 // pub mod ssa;
+pub mod defs;
 pub mod lexer;
 pub mod parser;
 pub mod strings;
 pub mod types;
-pub mod defs;
 
 #[cfg(test)]
 mod tests;
@@ -258,9 +258,7 @@ impl chumsky::Error<TokenKind> for Error {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
-    //TODO Not,
     Exp,
-
     Add,
     Sub,
     Mul,
@@ -289,7 +287,50 @@ pub enum Operator {
     Cerm,
 
     Assign,
-    Flow,
+}
+
+impl Operator {
+    #[inline]
+    pub const fn is_arithmetic(&self) -> bool {
+        matches!(
+            self,
+            Self::Exp
+                | Self::Add
+                | Self::Sub
+                | Self::Mul
+                | Self::Div
+                | Self::Rem
+                | Self::Shr
+                | Self::Shl
+                | Self::BitXor
+                | Self::BitAnd
+                | Self::BitOr
+        )
+    }
+
+    #[inline]
+    pub const fn is_boolean(&self) -> bool {
+        matches!(
+            self,
+            Self::Eq | Self::NotEq | Self::Greater | Self::GreaterEq | Self::Less | Self::LessEq
+        )
+    }
+
+    #[inline]
+    pub const fn is_logical(&self) -> bool {
+        matches!(
+            self,
+            Self::Eq
+                | Self::NotEq
+                | Self::Greater
+                | Self::GreaterEq
+                | Self::Less
+                | Self::LessEq
+                | Self::Or
+                | Self::Xor
+                | Self::And
+        )
+    }
 }
 
 #[macro_export]

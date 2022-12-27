@@ -1,32 +1,50 @@
+use std::collections::BTreeMap;
+
 ///! Module defining everything related to the Algo type system.
 use crate::{
+    interned,
     parser::{Expression, ExpressionKind},
     strings::Symbol,
-    Error,
+    Error, Operator,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Type {
-    Unit, // is `()`
-    Int,  // is `isize`
-    UInt, // is `usize`
-    Bool, // is `bool`
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// pub enum Type {
+//     Unit, // is `()`
+//     Int,  // is `isize`
+//     UInt, // is `usize`
+//     Bool, // is `bool`
 
-    Tuple(Vec<(Symbol, Self)>),
-    Array { ty: Box<Self>, len: Option<usize> },
+//     Tuple(Vec<(Symbol, Self)>),
+//     Array { ty: Box<Self>, len: Option<usize> },
 
-    Expression { input: Box<Self>, output: Box<Self> },
+//     Checked(Symbol),
+// }
 
-    Checked(Symbol),
+static TYPES_TMP: Types = Types::new();
+
+pub struct Type {
+    ops: Box<[Operator]>,
+}
+
+pub struct Types(BTreeMap<Symbol, Type>);
+
+impl Types {
+    const fn new() -> Self {
+        Self(BTreeMap::new())
+    }
 }
 
 #[derive(Debug)]
 pub struct TypedExpression {
-    ty: Type,
+    ty_id: Symbol,
     expr: Expression,
 }
 
-pub fn type_exprs(exprs: Vec<Expression>) -> Result<Vec<TypedExpression>, Vec<Error>> {
+pub fn type_exprs(
+    types: &Types,
+    exprs: Vec<Expression>,
+) -> Result<Vec<TypedExpression>, Vec<Error>> {
     let (exprs, errs) =
         exprs
             .into_iter()
@@ -47,32 +65,21 @@ pub fn type_exprs(exprs: Vec<Expression>) -> Result<Vec<TypedExpression>, Vec<Er
 }
 
 #[allow(unused_variables)]
-fn type_expr(expr: &Expression) -> Result<Type, Error> {
+fn type_expr(types: &Types, expr: &Expression) -> Result<Type, Error> {
     match expr.kind() {
         ExpressionKind::Error => todo!(),
-        ExpressionKind::Unit => Ok(Type::Unit),
-        ExpressionKind::Int(_) => Ok(Type::Int),
-        ExpressionKind::UInt(_) => Ok(Type::UInt),
-        ExpressionKind::Bool(_) => Ok(Type::Bool),
+
+        ExpressionKind::Unit => Ok(types[&interned!("Unit")]),
+        ExpressionKind::Int(_) => Ok(types[&interned!("Int")]),
+        ExpressionKind::UInt(_) => Ok(types[&interned!("UInt")]),
+        ExpressionKind::Bool(_) => Ok(types[&interned!("Bool")]),
 
         ExpressionKind::Binary { lhs, op, rhs } => {
             let lhs_ty = type_expr(&*lhs)?;
             let rhs_ty = type_expr(&*rhs)?;
-
-            if lhs_ty == rhs_ty {
-                Ok(lhs_ty)
-            } else {
-                Err(Error::general(
-                    lhs.span().start..rhs.span().end,
-                    "type mistmatch in binary expression",
-                    Some("crate::types::type_exprs.type_expr.binary"),
-                ))
-            }
         }
 
-        ExpressionKind::Compound(exprs) => {
-            exprs.iter().try_fold(Type::Unit, |_, expr| type_expr(expr))
-        }
+        ExpressionKind::Compound(exprs) => todo!(),
 
         ExpressionKind::ControlFlow { from, into } => type_expr(&*from)
             .and_then(|from_ty| into.as_ref().map_or(Ok(from_ty), |into| type_expr(&*into))),
@@ -81,7 +88,7 @@ fn type_expr(expr: &Expression) -> Result<Type, Error> {
             todo!()
         }
 
-        ExpressionKind::Var { name, ty, expr } => todo!(),
-        ExpressionKind::Type { name, ty } => todo!(),
+        ExpressionKind::VarDef { name, ty, expr } => todo!(),
+        ExpressionKind::TypeDef { name, ty } => todo!(),
     }
 }

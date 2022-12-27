@@ -17,6 +17,7 @@ pub enum ExpressionKind {
     Array(Vec<Expression>),
     Tuple(Vec<Expression>),
 
+    TypeId(Symbol),
     Identifier(Symbol),
 
     Binary {
@@ -32,13 +33,13 @@ pub enum ExpressionKind {
         into: Option<Box<Expression>>,
     },
 
-    Var {
+    VarDef {
         name: Symbol,
         ty: Type,
         expr: Box<Expression>,
     },
 
-    Type {
+    TypeDef {
         name: Symbol,
         ty: Type,
     },
@@ -78,13 +79,13 @@ pub fn parse(tokens: crate::lexer::Tokens) -> Result<Vec<Expression>, Vec<Error>
 type AlgoParser<'a, T> = BoxedParser<'a, TokenKind, T, Error>;
 
 fn parse_aggregate<'a>() -> AlgoParser<'a, Vec<Expression>> {
-    choice((parse_var(), parse_control_flow()))
+    choice((parse_vardef(), parse_control_flow()))
         .repeated()
         .then_ignore(end())
         .boxed()
 }
 
-fn parse_var<'a>() -> AlgoParser<'a, Expression> {
+fn parse_vardef<'a>() -> AlgoParser<'a, Expression> {
     let unit = select! { TokenKind::TypeUnit => Type::Unit };
     let body = choice((parse_tuple_type(), unit))
         .then_ignore(just(TokenKind::Flow))
@@ -94,12 +95,12 @@ fn parse_var<'a>() -> AlgoParser<'a, Expression> {
     let body_terminated = body.clone().then_ignore(just(TokenKind::Terminator));
     let body_delimited = body.delimited_by(just(TokenKind::BlockOpen), just(TokenKind::BlockClose));
 
-    just(TokenKind::Var)
+    just(TokenKind::VarDef)
         .ignore_then(parse_symbol())
         .then_ignore(just(TokenKind::Assign))
         .then(choice((body_terminated, body_delimited)))
         .map_with_span(|(name, (ty, expr)), span| {
-            let kind = ExpressionKind::Var {
+            let kind = ExpressionKind::VarDef {
                 name,
                 ty,
                 expr: Box::new(expr),
@@ -111,16 +112,16 @@ fn parse_var<'a>() -> AlgoParser<'a, Expression> {
         .boxed()
 }
 
-// fn parse_typedef<'a>() -> AlgoParser<'a, SpannedExpr> {
-//     just(TokenKind::TypeDef)
-//         .ignore_then(parse_symbol())
-//         .then_ignore(just(TokenKind::Assign))
-//         .then(parse_type())
-//         .then_ignore(just(TokenKind::Terminator))
-//         .map_with_span(|(name, ty), span| (Expression::TypeDef { name, ty }, span))
-//         .labelled("parse_typedef")
-//         .boxed()
-// }
+fn parse_typedef<'a>() -> AlgoParser<'a, Expression> {
+    just(TokenKind::TypeDef)
+        .ignore_then(parse_symbol())
+        .then_ignore(just(TokenKind::Assign))
+        .then(parse_type())
+        .then_ignore(just(TokenKind::Terminator))
+        .map_with_span(|(name, ty), span| expr!(ExpressionKind::TypeDef { name, ty }, span))
+        .labelled("parse_typedef")
+        .boxed()
+}
 
 fn parse_type() -> impl Parser<TokenKind, Type, Error = Error> {
     choice((
